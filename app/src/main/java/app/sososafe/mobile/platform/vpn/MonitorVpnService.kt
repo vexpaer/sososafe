@@ -66,7 +66,7 @@ class MonitorVpnService:VpnService() {
             setUnderlyingNetworks(underlying?.let{arrayOf(it)})
             val app=application as SosoApplication
             recorder=TrafficRecorder(this,app.repo,scope)
-            val config=File(cacheDir,"tunnel.yml").apply{writeText("""
+            val config=File.createTempFile("tunnel-",".yml",cacheDir).apply{writeText("""
                 tunnel:
                   name: sososafe
                   mtu: 1500
@@ -85,12 +85,13 @@ class MonitorVpnService:VpnService() {
                   log-file: /dev/null
             """.trimIndent())}
             state.value=MonitorState(true,"ACTIVE")
+            val nativeDescriptor=ParcelFileDescriptor.dup(checkNotNull(tun).fileDescriptor)
             nativeJob=scope.launch{
                 try {
-                    val result=NativeTunnel.run(config.absolutePath,checkNotNull(tun).fd,checkNotNull(recorder))
+                    val result=NativeTunnel.run(config.absolutePath,nativeDescriptor.fd,checkNotNull(recorder))
                     if(state.value.running)state.value=MonitorState(false,"ERROR","Native tunnel exited ($result)")
                 }catch(e:Throwable){state.value=MonitorState(false,"ERROR",e.message)}
-                finally{config.delete();stopMonitor()}
+                finally{nativeDescriptor.close();config.delete();stopMonitor()}
             }
             scope.launch {while(isActive && state.value.running){delay(2000);state.value=state.value.copy(unrecorded=recorder?.dropped ?: 0)}}
         }catch(e:Exception){state.value=MonitorState(false,"ERROR",e.message);stopMonitor()}

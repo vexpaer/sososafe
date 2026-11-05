@@ -2,7 +2,7 @@ package app.sososafe.core
 
 import java.net.InetAddress
 
-data class PacketMeta(val version:Int,val protocol:Int,val source:String,val destination:String,val sourcePort:Int,val destinationPort:Int,val length:Int,val tcpFlags:Int,val payloadOffset:Int)
+data class PacketMeta(val version:Int,val protocol:Int,val source:String,val destination:String,val sourcePort:Int,val destinationPort:Int,val length:Int,val tcpFlags:Int,val payloadOffset:Int,val tcpSequence:Long=0)
 data class DnsMessage(val names:List<String>,val addresses:Map<String,List<String>>,val response:Boolean)
 object Packets {
     fun u16(b:ByteArray,o:Int):Int { require(o>=0 && o+2<=b.size); return ((b[o].toInt() and 255) shl 8) or (b[o+1].toInt() and 255) }
@@ -32,7 +32,8 @@ object Packets {
         val flags=if(protocol==6) b[offset+13].toInt() and 255 else 0
         val header=if(protocol==6) ((b[offset+12].toInt() and 255) ushr 4)*4 else 8
         require(header>=(if(protocol==6)20 else 8) && offset+header<=len)
-        PacketMeta(version,protocol,source,destination,sp,dp,len,flags,offset+header)
+        val sequence=if(protocol==6)(u16(b,offset+4).toLong() shl 16) or u16(b,offset+6).toLong()else 0L
+        PacketMeta(version,protocol,source,destination,sp,dp,len,flags,offset+header,sequence)
     }.getOrNull()
     fun dns(b:ByteArray):DnsMessage? = runCatching {
         require(b.size>=12 && b.size<=65535)

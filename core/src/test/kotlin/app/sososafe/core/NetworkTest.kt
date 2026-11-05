@@ -33,6 +33,15 @@ class NetworkTest {
         assertEquals(listOf("1.2.3.4"),Packets.dns(reply)?.addresses?.get("example.com"))
         val cycle=ByteArray(18);cycle[5]=1;cycle[12]=0xc0.toByte();cycle[13]=12;assertNull(Packets.dns(cycle))
     }
+    @Test fun tcpDnsReassemblesAndRejectsGapsAndRetransmits(){
+        val message=query();val framed=byteArrayOf((message.size ushr 8).toByte(),message.size.toByte())+message
+        val parser=DnsTcpAssembler();parser.feed("a",100,byteArrayOf(),true)
+        assertTrue(parser.feed("a",101,framed.copyOfRange(0,5)).isEmpty())
+        assertTrue(parser.feed("a",101,framed.copyOfRange(0,5)).isEmpty())
+        assertEquals(listOf("example.com"),parser.feed("a",106,framed.copyOfRange(5,framed.size)).single().names)
+        parser.feed("b",100,byteArrayOf(),true);assertTrue(parser.feed("b",110,framed).isEmpty());assertTrue(parser.feed("b",101,framed).isEmpty())
+        assertTrue(parser.feed("unknown",101,framed).isEmpty())
+    }
     private fun auth(proxy:LocalSocksProxy):Socket {
         val s=Socket("127.0.0.1",proxy.port);s.soTimeout=5000;val out=DataOutputStream(s.getOutputStream());val input=DataInputStream(s.getInputStream())
         out.write(byteArrayOf(5,1,2));assertEquals(5,input.readUnsignedByte());assertEquals(2,input.readUnsignedByte())

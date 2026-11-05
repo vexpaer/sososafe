@@ -256,7 +256,7 @@ private fun openSettings(context:android.content.Context,pkg:String){context.sta
         item{Section(t("Appearance","外观"))}
         item{Choice(t("Theme","主题"),s.theme,listOf("system" to t("System","跟随系统"),"light" to t("Light","浅色"),"dark" to t("Dark","深色"))){vm.set("theme",it)}}
         item{Toggle(t("Dynamic color","动态取色"),s.dynamic){vm.set("dynamic",it)}}
-        item{Choice(t("Manual accent","手动主题色"),s.color,listOf("teal" to t("Teal","青绿"),"blue" to t("Blue","蓝色"),"plum" to t("Plum","紫色"))){vm.set("color",it)}}
+        item{Choice(t("Manual accent","手动主题色"),s.color,listOf("teal" to t("Teal","青绿"),"blue" to t("Blue","蓝色"),"plum" to t("Plum","紫色"))){vm.accent(it)}}
         item{Choice(t("Language","语言"),s.language,listOf("system" to t("System","跟随系统"),"zh" to "中文","en" to "English")){vm.set("language",it)}}
         item{Section(t("Scanning & storage","扫描与存储"))}
         item{Toggle(t("Analyze readable APK / DEX files","分析可读 APK / DEX 文件"),s.deepScan){vm.set("deep",it)}}

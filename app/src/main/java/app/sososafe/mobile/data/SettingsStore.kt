@@ -13,5 +13,6 @@ class SettingsStore(context:Context) {
     val flow=store.data.map { p -> UserSettings(runCatching { ScanMode.valueOf(p[stringPreferencesKey("mode")] ?: "AUTO") }.getOrDefault(ScanMode.AUTO),p[stringPreferencesKey("theme")] ?: "system",p[booleanPreferencesKey("dynamic")] ?: true,p[stringPreferencesKey("color")] ?: "teal",p[stringPreferencesKey("language")] ?: "system",p[booleanPreferencesKey("deep")] ?: true,p[booleanPreferencesKey("system")] ?: false,p[intPreferencesKey("retention")] ?: 7) }
     suspend fun set(key:String,value:String) { store.edit { it[stringPreferencesKey(key)]=value } }
     suspend fun set(key:String,value:Boolean) { store.edit { it[booleanPreferencesKey(key)]=value } }
+    suspend fun accent(value:String){require(value in setOf("teal","blue","plum"));store.edit{it[stringPreferencesKey("color")]=value;it[booleanPreferencesKey("dynamic")]=false}}
     suspend fun retention(days:Int) { require(days in setOf(1,7,30)); store.edit { it[intPreferencesKey("retention")]=days } }
 }

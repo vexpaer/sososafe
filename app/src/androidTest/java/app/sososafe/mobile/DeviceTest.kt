@@ -61,7 +61,7 @@ class DeviceTest {
             override fun onUpgrade(db:SupportSQLiteDatabase,oldVersion:Int,newVersion:Int){error("Unexpected upgrade")}
         }).build())
         val value=ReportWriter.json.encodeToString(AppRecord("fixture.large","Unicode 😀",analysis=StaticResult(limitations=listOf("中文😀".repeat(300000)))))
-        helper.writableDatabase.execSQL("INSERT INTO applications(packageName,risk,updated,json) VALUES(?,?,?,?)",arrayOf("fixture.large",0,1,value));helper.close()
+        helper.writableDatabase.execSQL("INSERT INTO applications(packageName,risk,updated,json) VALUES(?,?,?,?)",arrayOf<Any>("fixture.large",0,1,value));helper.close()
         val migrated=Room.databaseBuilder(context,AuditDatabase::class.java,name).addMigrations(AuditDatabase.MIGRATION_1_2).build()
         try {
             val builder=StringBuilder()

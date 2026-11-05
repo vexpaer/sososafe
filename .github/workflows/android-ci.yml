@@ -50,6 +50,7 @@ jobs:
         run: |
           chmod +x gradlew
           set -o pipefail
+          python3 -m unittest discover -s scripts -p 'test_*.py'
           ./gradlew :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest --continue --stacktrace 2>&1 | tee android-build.log
       - name: Prepare APK and checksum
         run: |

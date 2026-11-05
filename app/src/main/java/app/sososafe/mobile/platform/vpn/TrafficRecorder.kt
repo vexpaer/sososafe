@@ -24,6 +24,7 @@ class TrafficRecorder(private val context:Context,private val repo:AuditReposito
     private val requested=hashSetOf<String>()
     private val queries=Channel<OwnerQuery>(256)
     private val dns=LinkedHashMap<String,Pair<String,Long>>(256,0.75f,true)
+    private val tcpDns=DnsTcpAssembler()
     private val session=UUID.randomUUID().toString();private var sequence=0L
     private val cm=context.getSystemService(ConnectivityManager::class.java)
     private val missed=AtomicLong()
@@ -77,15 +78,15 @@ class TrafficRecorder(private val context:Context,private val repo:AuditReposito
                     if(!queries.trySend(OwnerQuery(tuple,id,p.protocol,local,lp,remote,rp)).isSuccess)requested.remove(id)
                 }
                 var query:List<String> = emptyList()
-                if(p.protocol==17 && (lp==53 || rp==53) && p.payloadOffset<data.size) {
-                    Packets.dns(data.copyOfRange(p.payloadOffset,minOf(data.size,p.length)))?.let { message ->
-                        query=message.names
-                        if(message.response)message.addresses.forEach{(name,ips)->ips.forEach{dns[it]=name to now}}
-                    }
+                if((lp==53 || rp==53) && p.payloadOffset<=data.size) {
+                    val payload=data.copyOfRange(p.payloadOffset,minOf(data.size,p.length))
+                    val messages=if(p.protocol==17)listOfNotNull(Packets.dns(payload))else tcpDns.feed("$tuple:$outbound",p.tcpSequence,payload,p.tcpFlags and 2!=0,now)
+                    messages.forEach{message->query=(query+message.names).distinct();if(message.response)message.addresses.forEach{(name,ips)->ips.forEach{dns[it]=name to now}}}
+                    if(p.protocol==6 && p.tcpFlags and 5!=0)tcpDns.clear("$tuple:$outbound")
                 }
                 val dnsHost=dns[remote]?.takeIf{now-it.second<300000}?.first
                 val domain=dnsHost ?: query.firstOrNull() ?: old?.domain
-                val rule=DomainRules.classify(domain ?: remote)
+                val rule=if(old!=null && old.domain==domain)DomainRule(domain ?: remote,old.provider,old.category,old.tracker)else DomainRules.classify(domain ?: remote)
                 val state=when {p.protocol==6 && p.tcpFlags and 4!=0 -> "RESET";p.protocol==6 && (p.tcpFlags and 1!=0 || old?.state=="CLOSING") -> "CLOSING";else->"ACTIVE"}
                 val record=(old ?: ConnectionRecord(id,now,now,if(p.protocol==6)"TCP"else"UDP",local,lp,remote,rp)).copy(
                     lastSeen=now,uid=uid,packages=old?.packages.orEmpty(),attribution=if(shellUid!=null)"SHELL_SOCKET_UID"else old?.attribution ?: "UNKNOWN",

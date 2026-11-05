@@ -30,6 +30,7 @@ class AuditViewModel(application:Application):AndroidViewModel(application) {
     fun set(key:String,value:String){viewModelScope.launch{repo.settings.set(key,value)}}
     fun set(key:String,value:Boolean){viewModelScope.launch{repo.settings.set(key,value)}}
     fun retention(days:Int){viewModelScope.launch{repo.settings.retention(days)}}
+    fun accent(value:String){viewModelScope.launch{repo.settings.accent(value)}}
     fun prepare(app:AppRecord,kind:String,argument:String="")=task{plan.value=this.app.actions.prepare(app,kind,argument)}
     fun execute() {val p=plan.value ?: return;plan.value=null;task{val result=app.actions.execute(p);message.value=result.result;if(result.result=="AWAITING_SYSTEM_CONFIRMATION")app.actions.launchUninstall(result)}}
     fun rollback(record:ActionRecord)=task{app.actions.rollback(record);message.value="Rollback result saved / 回滚结果已保存"}

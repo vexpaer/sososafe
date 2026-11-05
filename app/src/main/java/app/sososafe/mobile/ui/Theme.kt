@@ -15,7 +15,7 @@ val LocalChinese=staticCompositionLocalOf{false}
 @Composable fun SosoTheme(settings:UserSettings,content:@Composable ()->Unit){
     val dark=when(settings.theme){"dark"->true;"light"->false;else->isSystemInDarkTheme()}
     val primary=when(settings.color){"blue"->Color(0xFF315DA8);"plum"->Color(0xFF81507C);else->Color(0xFF006B5B)}
-    val color=if(dark) Color(0xFF8CD8C2) else primary
+    val color=if(dark)when(settings.color){"blue"->Color(0xFFB0C6FF);"plum"->Color(0xFFF1B5E5);else->Color(0xFF8CD8C2)}else primary
     val scheme=if(settings.dynamic && Build.VERSION.SDK_INT>=31){if(dark)dynamicDarkColorScheme(LocalContext.current)else dynamicLightColorScheme(LocalContext.current)}else if(dark)darkColorScheme(primary=color,secondary=Color(0xFFB3CCC4))else lightColorScheme(primary=primary,secondary=Color(0xFF4B635C))
     val chinese=when(settings.language){"zh"->true;"en"->false;else->LocalConfiguration.current.locales[0].language=="zh"}
     CompositionLocalProvider(LocalChinese provides chinese){MaterialTheme(colorScheme=scheme,content=content)}

@@ -1,11 +1,13 @@
 /* sososafe MIT bridge, using the MIT-licensed HevSocks5Tunnel engine. */
 #include <jni.h>
+#include <stdatomic.h>
 #include <lwip/pbuf.h>
 #include "hev-main.h"
 
 static JNIEnv *observer_env;
 static jobject observer;
 static jmethodID packet_method;
+static atomic_int active;
 
 /* Called synchronously on the engine's single native worker thread. */
 void soso_observe(struct pbuf *p, int outbound) {
@@ -23,8 +25,10 @@ void soso_observe(struct pbuf *p, int outbound) {
 }
 
 JNIEXPORT jint JNICALL Java_app_sososafe_mobile_platform_vpn_NativeTunnel_run(JNIEnv *env, jclass cls, jstring config, jint fd, jobject sink) {
+    int expected = 0;
+    if (!atomic_compare_exchange_strong(&active, &expected, 1)) return -2;
     const char *path = (*env)->GetStringUTFChars(env, config, 0);
-    if (!path) return -1;
+    if (!path) { atomic_store(&active, 0); return -1; }
     observer_env = env;
     observer = (*env)->NewGlobalRef(env, sink);
     jclass sink_class = (*env)->GetObjectClass(env, sink);
@@ -34,6 +38,7 @@ JNIEXPORT jint JNICALL Java_app_sososafe_mobile_platform_vpn_NativeTunnel_run(JN
     (*env)->ReleaseStringUTFChars(env, config, path);
     (*env)->DeleteGlobalRef(env, observer);
     observer = 0; observer_env = 0; packet_method = 0;
+    atomic_store(&active, 0);
     return result;
 }
 JNIEXPORT void JNICALL Java_app_sososafe_mobile_platform_vpn_NativeTunnel_stop(JNIEnv *env, jclass cls) { hev_socks5_tunnel_quit(); }

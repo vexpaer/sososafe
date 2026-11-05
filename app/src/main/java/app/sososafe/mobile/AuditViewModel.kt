@@ -23,7 +23,7 @@ class AuditViewModel(application:Application):AndroidViewModel(application) {
     val plan=MutableStateFlow<ActionPlan?>(null)
     fun scan(){repo.scan(viewModelScope)}
     fun cancel(){repo.cancelScan()}
-    fun import(uri:Uri)=task {repo.importApk(uri);message.value="APK analysis saved / APK 分析已保存"}
+    fun importApk(uri:Uri)=task {repo.importApk(uri);message.value="APK analysis saved / APK 分析已保存"}
     fun refresh(){repo.access.refresh()}
     fun root()=task {repo.access.requestRoot();message.value=repo.access.state.value.message}
     fun shizuku(){runCatching{repo.access.requestShizuku()}.onFailure{message.value=it.message}}

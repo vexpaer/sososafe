@@ -69,6 +69,9 @@ class AnalysisTest {
         (0..4).forEach{assertTrue(Commands.valid(Commands.restoreEnabled("test.audit",it,0)))}
         assertEquals("default-state",Commands.restoreEnabled("test.audit",0,0)[1])
         assertEquals("foreground",Commands.opMode("CAMERA: foreground; time=123", "CAMERA"))
+        assertEquals("allow",Commands.packageOpMode("Uid mode: CAMERA: ignore\nCAMERA: allow; time=0","CAMERA"))
+        assertNull(Commands.packageOpMode("Uid mode: CAMERA: ignore","CAMERA"))
+        assertEquals("allow",Commands.packageOpMode("No operations.\nDefault mode: allow\n","CAMERA"))
     }
     @Test fun reportsContainEvidenceAndRoundTripJson(){
         val r=AuditReport(generatedAt=0,device=mapOf("model" to "fixture"),mode=ScanMode.STANDARD,apps=listOf(AppRecord("test.audit","A\"B")),scans=emptyList(),connections=emptyList(),actions=emptyList())
@@ -77,9 +80,14 @@ class AnalysisTest {
     }
     private fun dexWithString(value:String):ByteArray {
         val str=value.toByteArray();val data=byteArrayOf(str.size.toByte())+str+byteArrayOf(0)
-        val b=ByteBuffer.allocate(116+data.size).order(ByteOrder.LITTLE_ENDIAN)
+        val mapOffset=(116+data.size+3) and -4
+        val b=ByteBuffer.allocate(mapOffset+52).order(ByteOrder.LITTLE_ENDIAN)
         b.put("dex\n035\u0000".toByteArray());b.putInt(32,b.capacity());b.putInt(36,112);b.putInt(40,0x12345678)
-        b.putInt(56,1);b.putInt(60,112);b.putInt(104,data.size);b.putInt(108,116);b.position(112);b.putInt(116);b.put(data)
+        b.putInt(52,mapOffset);b.putInt(56,1);b.putInt(60,112);b.putInt(104,b.capacity()-116);b.putInt(108,116);b.position(112);b.putInt(116);b.put(data)
+        b.position(mapOffset);b.putInt(4)
+        listOf(Triple(0,1,0),Triple(1,1,112),Triple(0x2002,1,116),Triple(0x1000,1,mapOffset)).forEach{(type,count,offset)->b.putShort(type.toShort());b.putShort(0);b.putInt(count);b.putInt(offset)}
+        val array=b.array();val signature=java.security.MessageDigest.getInstance("SHA-1").digest(array.copyOfRange(32,array.size));signature.copyInto(array,12)
+        val checksum=java.util.zip.Adler32().apply{update(array,12,array.size-12)}.value.toInt();b.putInt(8,checksum)
         return b.array()
     }
     @Test fun parsesDexStringTableAndApkArchive(){

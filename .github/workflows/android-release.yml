@@ -49,7 +49,7 @@ jobs:
         run: |
           chmod +x gradlew
           set -o pipefail
-          ./gradlew :core:test :app:testReleaseUnitTest :app:lintRelease :app:assembleRelease --stacktrace 2>&1 | tee release-build.log
+          ./gradlew :core:test :app:testReleaseUnitTest :app:lintRelease :app:assembleRelease --continue --stacktrace 2>&1 | tee release-build.log
       - name: Verify signature and prepare download
         run: |
           mkdir -p dist

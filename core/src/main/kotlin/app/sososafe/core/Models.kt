@@ -50,7 +50,7 @@ import kotlinx.serialization.Serializable
     val provider: String = "Unknown", val category: String = "Unknown", val tracker: Boolean = false,
     val uploaded: Long = 0, val downloaded: Long = 0, val packets: Long = 0,
     val connections: Int = 0, val dnsQueries: List<String> = emptyList(), val state: String = "OBSERVED",
-    val domainEvidence:String?=null
+    val domainEvidence:String?=null, val evidenceLevel:EvidenceLevel=EvidenceLevel.OBSERVED_CONNECTION
 )
 @Serializable data class ActionRecord(
     val id: String, val packageName: String, val action: String, val argument: String = "",

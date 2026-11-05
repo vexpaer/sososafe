@@ -29,15 +29,23 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.6.0'
+      - uses: actions/cache@v4
+        id: native-cache
+        with:
+          path: app/src/main/jniLibs
+          key: native-ndk28-${{ runner.os }}-${{ hashFiles('native/**', 'scripts/build-native.sh', '.gitmodules') }}
       - name: Install pinned SDK and NDK
-        run: sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0' 'ndk;28.2.13676358'
+        run: |
+          sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0'
+          if [ '${{ steps.native-cache.outputs.cache-hit }}' != 'true' ]; then sdkmanager 'ndk;28.2.13676358'; fi
       - name: Build local forwarding engine
+        if: steps.native-cache.outputs.cache-hit != 'true'
         run: ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358" bash scripts/build-native.sh 2>&1 | tee native-build.log
       - name: Test, Lint and assemble
         run: |
           chmod +x gradlew
           set -o pipefail
-          ./gradlew :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace 2>&1 | tee android-build.log
+          ./gradlew :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --continue --stacktrace 2>&1 | tee android-build.log
       - name: Prepare APK and checksum
         run: |
           mkdir -p dist

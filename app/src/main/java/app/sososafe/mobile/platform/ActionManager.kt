@@ -25,8 +25,8 @@ class ActionManager(private val context:Context,private val repo:AuditRepository
         when(kind) {
             "APP_OP" -> {
                 check(mode!=ScanMode.STANDARD){"Root or Shizuku authorization required"};require(argument in Commands.allowedOps)
-                val output=access.execute(mode,Commands.ops(app.packageName,user)).checked()
-                original=Commands.opMode(output,argument) ?: if(output.contains("No operations.") || !Regex("\\b${Regex.escape(argument)}:").containsMatchIn(output)) "default" else error("Cannot determine original AppOp")
+                val output=access.execute(mode,Commands.op(app.packageName,argument,user)).checked()
+                original=Commands.packageOpMode(output,argument) ?: error("Cannot determine original package AppOp separately from UID overrides. Use Android settings.")
                 desired="ignore";effect="Restrict $argument to ignore. The related feature may stop working. Original mode: $original. UID-wide AppOps can affect packages sharing a UID."
             }
             "DISABLE" -> {
@@ -49,12 +49,12 @@ class ActionManager(private val context:Context,private val repo:AuditRepository
         val result=try {
             when(plan.kind) {
                 "APP_OP" -> {
-                    val before=access.execute(plan.mode,Commands.ops(plan.app.packageName,plan.userId)).checked()
-                    val current=Commands.opMode(before,plan.argument) ?: "default"
+                    val before=access.execute(plan.mode,Commands.op(plan.app.packageName,plan.argument,plan.userId)).checked()
+                    val current=Commands.packageOpMode(before,plan.argument)
                     check(current==plan.original){"State changed after confirmation; prepare again"}
                     access.execute(plan.mode,Commands.setOp(plan.app.packageName,plan.argument,plan.desired,plan.userId)).checked()
-                    val after=access.execute(plan.mode,Commands.ops(plan.app.packageName,plan.userId)).checked()
-                    check(Commands.opMode(after,plan.argument)==plan.desired){"AppOps did not confirm requested mode"};"SUCCESS"
+                    val after=access.execute(plan.mode,Commands.op(plan.app.packageName,plan.argument,plan.userId)).checked()
+                    check(Commands.packageOpMode(after,plan.argument)==plan.desired){"AppOps did not confirm requested package mode"};"SUCCESS"
                 }
                 "DISABLE" -> {
                     check(context.packageManager.getApplicationEnabledSetting(plan.app.packageName).toString()==plan.original){"Enabled state changed; prepare again"}
@@ -95,8 +95,8 @@ class ActionManager(private val context:Context,private val repo:AuditRepository
             when(record.action) {
                 "APP_OP" -> {
                     access.execute(record.mode,Commands.setOp(record.packageName,record.argument,record.original,record.userId)).checked()
-                    val after=access.execute(record.mode,Commands.ops(record.packageName,record.userId)).checked()
-                    check((Commands.opMode(after,record.argument) ?: "default")==record.original){"Restored mode not confirmed"}
+                    val after=access.execute(record.mode,Commands.op(record.packageName,record.argument,record.userId)).checked()
+                    check(Commands.packageOpMode(after,record.argument)==record.original){"Restored package mode not confirmed"}
                 }
                 "DISABLE" -> {
                     access.execute(record.mode,Commands.restoreEnabled(record.packageName,record.original.toInt(),record.userId)).checked()

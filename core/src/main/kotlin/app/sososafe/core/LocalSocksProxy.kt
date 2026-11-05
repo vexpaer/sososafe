@@ -49,12 +49,13 @@ class LocalSocksProxy(
         when(command){
             1 -> {
                 val remote=Socket();resources+=remote
+                var accepted=false
                 try {
                     protectTcp(remote);remote.tcpNoDelay=true;remote.connect(InetSocketAddress(host,port),15000)
-                    reply(output,0);client.soTimeout=0
+                    reply(output,0);accepted=true;client.soTimeout=0
                     val up=executor.submit {try{client.getInputStream().copyTo(remote.getOutputStream())}catch(_:Exception){}finally{runCatching{remote.shutdownOutput()}}}
                     try{remote.getInputStream().copyTo(output);output.flush()}finally{runCatching{client.shutdownOutput()};up.get(10,TimeUnit.SECONDS)}
-                }catch(e:Exception){runCatching{reply(output,5)}}finally{resources.remove(remote);remote.close()}
+                }catch(e:Exception){if(!accepted)runCatching{reply(output,5)}}finally{resources.remove(remote);remote.close()}
             }
             3 -> udpAssociation(client,output)
             else -> reply(output,7)

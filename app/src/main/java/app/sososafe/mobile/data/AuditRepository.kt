@@ -79,7 +79,8 @@ class AuditRepository(private val context:Context,val db:AuditDatabase,val setti
         } finally {file.delete()}
     }
     suspend fun export(format:String):File=withContext(Dispatchers.IO) {
-        val report=AuditReport(generatedAt=System.currentTimeMillis(),device=mapOf("manufacturer" to Build.MANUFACTURER,"model" to Build.MODEL,"android" to Build.VERSION.RELEASE,"api" to Build.VERSION.SDK_INT.toString(),"securityPatch" to Build.VERSION.SECURITY_PATCH),mode=access.selected(settings.flow.first().mode),apps=dao.allApps().map { json.decodeFromString(it.json) },scans=dao.allScans().map { json.decodeFromString(it.json) },connections=dao.allConnections().map { json.decodeFromString(it.json) },actions=dao.allActions().map { json.decodeFromString(it.json) })
+        val savedScans=dao.allScans().map { json.decodeFromString<ScanRecord>(it.json) }
+        val report=AuditReport(generatedAt=System.currentTimeMillis(),device=mapOf("manufacturer" to Build.MANUFACTURER,"model" to Build.MODEL,"android" to Build.VERSION.RELEASE,"api" to Build.VERSION.SDK_INT.toString(),"securityPatch" to Build.VERSION.SECURITY_PATCH),mode=savedScans.firstOrNull()?.mode ?: ScanMode.STANDARD,apps=dao.allApps().map { json.decodeFromString(it.json) },scans=savedScans,connections=dao.allConnections().map { json.decodeFromString(it.json) },actions=dao.allActions().map { json.decodeFromString(it.json) })
         val dir=File(context.filesDir,"reports").apply{mkdirs()}
         File(dir,"sososafe-${System.currentTimeMillis()}.$format").apply { writeText(ReportWriter.render(report,format)) }
     }

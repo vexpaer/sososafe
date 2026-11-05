@@ -62,7 +62,7 @@ private fun bytes(value:Long):String=when {value>=1024L*1024*1024->"%.2f GiB".fo
         var clearDialog by remember{mutableStateOf(false)};var rollback by remember{mutableStateOf<ActionRecord?>(null)}
         var exportFile by remember{mutableStateOf<File?>(null)}
         val snackbar=remember{SnackbarHostState()}
-        val picker=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()){uri->uri?.let(vm::import)}
+        val picker=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()){uri->uri?.let(vm::importApk)}
         fun startVpn(){context.startForegroundService(Intent(context,MonitorVpnService::class.java))}
         val vpnConsent=rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()){r->if(r.resultCode==android.app.Activity.RESULT_OK)startVpn()else vm.message.value="VPN permission cancelled / VPN 授权已取消"}
         fun consentVpn(){val intent=VpnService.prepare(context);if(intent==null)startVpn()else vpnConsent.launch(intent)}

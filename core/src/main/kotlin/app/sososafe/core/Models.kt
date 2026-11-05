@@ -39,7 +39,8 @@ import kotlinx.serialization.Serializable
     val findings: List<Finding> = emptyList(), val exposures: List<ExposureLink> = emptyList(),
     val riskScore: Int = 0, val scannedAt: Long = System.currentTimeMillis(),
     val mode: ScanMode = ScanMode.STANDARD, val imported: Boolean = false,
-    val limitations: List<String> = emptyList(), val appOps: String? = null
+    val limitations: List<String> = emptyList(), val appOps: String? = null,
+    val scoreComponents:Map<String,Int> = emptyMap()
 ) { val risk: Severity get() = when { riskScore >= 60 -> Severity.HIGH; riskScore >= 30 -> Severity.MEDIUM; riskScore > 0 -> Severity.LOW; else -> Severity.INFO } }
 @Serializable data class ScanRecord(val id: String, val startedAt: Long, val finishedAt: Long?, val mode: ScanMode, val status: String, val count: Int, val error: String? = null)
 @Serializable data class ConnectionRecord(

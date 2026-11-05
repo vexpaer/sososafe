@@ -170,7 +170,7 @@ private fun openSettings(context:android.content.Context,pkg:String){context.sta
                 0->{
                     item{Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text(t("Review priority","检查优先级"),style=MaterialTheme.typography.titleLarge);Risk(app.riskScore)}}
                     item{Fact(t("Package","包名"),app.packageName);Fact(t("Version / UID / Target SDK","版本 / UID / 目标 SDK"),"${app.version} / ${app.uid} / ${app.targetSdk}");Fact(t("Source / Scan","来源 / 扫描"),"${app.installer ?: "Unknown"} · ${app.mode} · ${date(app.scannedAt)}");Fact(t("System / Enabled / Shared UID","系统 / 启用 / 共享 UID"),"${app.system} / ${app.enabled} / ${app.sharedUid ?: "—"}")}
-                    item{Section(t("Coverage & access limits","覆盖范围与访问限制"))}
+                    item{Fact(t("Score contributions after caps","分项计分（封顶后）"),app.scoreComponents.entries.joinToString("\n"){"${it.key}: ${it.value}"});Section(t("Coverage & access limits","覆盖范围与访问限制"))}
                     items(app.limitations+app.analysis.limitations){Text(it,style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)}
                     item{Fact(t("Analyzed files","已分析文件"),app.analysis.filesAnalyzed.joinToString("\n").ifEmpty{t("None. APK analysis not performed.","无，尚未进行 APK 分析。")})}
                     item{Section(t("Data exposure correlations","数据暴露关联"),t("Coexistence is not proof of disclosure.","共存关系不代表已证实泄露。"))}
@@ -187,7 +187,7 @@ private fun openSettings(context:android.content.Context,pkg:String){context.sta
                     if(app.analysis.endpoints.isEmpty())item{Empty(Icons.Default.Lan,t("No extracted endpoints","未提取到端点"),t("Check APK coverage. Encrypted or dynamically built addresses may not be visible.","请检查 APK 分析范围。加密或动态构建的地址可能不可见。"))}
                     items(app.analysis.endpoints){ep->
                         val observed=connections.filter{it.uid==app.uid && app.uid>=0 && (it.domain==ep.host || ep.host in it.dnsQueries)}
-                        Fact(ep.host,"${ep.value}\n${ep.provider} · ${ep.category}\n${ep.evidence.level} · ${ep.evidence.source}"+if(observed.isNotEmpty())"\nObserved UID connection/DNS: ${observed.size}; shared UID=${app.sharedUid!=null}" else "")
+                        Fact(ep.host,"${ep.value}\n${ep.provider} · ${ep.category}\n${ep.evidence.level} · ${ep.evidence.source}"+if(observed.isNotEmpty())"\nObserved UID metadata / DNS association: ${observed.size}; shared UID=${app.sharedUid!=null}; host association may be ambiguous" else "")
                         HorizontalDivider()
                     }
                 }
@@ -212,7 +212,7 @@ private fun openSettings(context:android.content.Context,pkg:String){context.sta
         }
     }
 }
-@Composable private fun FindingRow(f:Finding){Column(Modifier.fillMaxWidth().padding(vertical=8.dp)){Text(f.title,style=MaterialTheme.typography.titleMedium);Text("${f.severity} · +${f.points} · ${f.evidence.level}",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.primary);SelectionContainer{Text("${f.evidence.source}\n${f.evidence.detail}",style=MaterialTheme.typography.bodySmall)};Text(f.recommendation,Modifier.padding(top=6.dp),style=MaterialTheme.typography.bodyMedium);HorizontalDivider(Modifier.padding(top=12.dp))}}
+@Composable private fun FindingRow(f:Finding){Column(Modifier.fillMaxWidth().padding(vertical=8.dp)){Text(f.title,style=MaterialTheme.typography.titleMedium);Text("${f.severity} · weight ${f.points} (before cap) · ${f.evidence.level}",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.primary);SelectionContainer{Text("${f.evidence.source}\n${f.evidence.detail}",style=MaterialTheme.typography.bodySmall)};Text(f.recommendation,Modifier.padding(top=6.dp),style=MaterialTheme.typography.bodyMedium);HorizontalDivider(Modifier.padding(top=12.dp))}}
 
 @Composable private fun NetworkScreen(records:List<ConnectionRecord>,state:MonitorState,onStart:()->Unit,onStop:()->Unit,onShell:()->Unit){
     var filter by rememberSaveable{mutableStateOf("all")}
@@ -228,7 +228,7 @@ private fun openSettings(context:android.content.Context,pkg:String){context.sta
         item{TextButton(onClick=onShell){Text(t("Query privileged socket metadata","查询增强模式系统连接信息"))}}
         item{Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(8.dp)){listOf("all" to t("All","全部"),"active" to t("Active (30s)","活跃（30秒）"),"dns" to "DNS","trackers" to t("Tracking","追踪")).forEach{(key,label)->FilterChip(selected=filter==key,onClick={filter=key},label={Text(label)})}}}
         if(filtered.isEmpty())item{Empty(Icons.Default.Lan,t("No observed records","暂无观测记录"),t("Start monitoring and use another app. Encrypted DNS may hide query names.","启动监控后使用其他应用。加密 DNS 可能隐藏查询域名。"))}
-        items(filtered,key={it.id}){c->OutlinedCard(Modifier.fillMaxWidth()){Column(Modifier.padding(14.dp)){Text(c.domain ?: c.remoteIp,style=MaterialTheme.typography.titleMedium);SelectionContainer{Text("${c.protocol} ${c.remoteIp}:${c.remotePort}\n${c.localIp}:${c.localPort}",style=MaterialTheme.typography.bodySmall)};Text(c.packages.joinToString().ifBlank{t("Unknown application","应用未知")},style=MaterialTheme.typography.bodyMedium);Text("${c.attribution} · UID ${c.uid ?: "?"}\n${c.provider} · ${c.category}\n↑ ${bytes(c.uploaded)} ↓ ${bytes(c.downloaded)} · ${c.packets} packets · ${c.connections} connections\n${date(c.firstSeen)} → ${date(c.lastSeen)}",style=MaterialTheme.typography.bodySmall);if(c.dnsQueries.isNotEmpty())SelectionContainer{Text("DNS: "+c.dnsQueries.joinToString(),style=MaterialTheme.typography.bodySmall)}}}}
+        items(filtered,key={it.id}){c->OutlinedCard(Modifier.fillMaxWidth()){Column(Modifier.padding(14.dp)){Text(c.domain ?: c.remoteIp,style=MaterialTheme.typography.titleMedium);SelectionContainer{Text("${c.protocol} ${c.remoteIp}:${c.remotePort}\n${c.localIp}:${c.localPort}",style=MaterialTheme.typography.bodySmall)};Text(c.packages.joinToString().ifBlank{t("Unknown application","应用未知")},style=MaterialTheme.typography.bodyMedium);Text("${c.attribution} · UID ${c.uid ?: "?"}\n${c.provider} · ${c.category}\n${c.domainEvidence ?: "IP metadata only"}\n↑ ${bytes(c.uploaded)} ↓ ${bytes(c.downloaded)} · ${c.packets} packets · ${c.connections} connections\n${date(c.firstSeen)} → ${date(c.lastSeen)}",style=MaterialTheme.typography.bodySmall);if(c.dnsQueries.isNotEmpty())SelectionContainer{Text("DNS: "+c.dnsQueries.joinToString(),style=MaterialTheme.typography.bodySmall)}}}}
     }
 }
 

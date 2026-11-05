@@ -18,6 +18,7 @@ object ReportWriter {
             for(app in report.apps) {
                 appendLine("\n${if(format=="md") "## " else ""}${clean(app.label)} (${app.packageName})")
                 appendLine("UID=${app.uid}; version=${clean(app.version)}; system=${app.system}; target=${app.targetSdk}; risk=${app.riskScore}/100 (${app.risk}); scanned=${Instant.ofEpochMilli(app.scannedAt)}")
+                appendLine("Score contributions after family caps: ${app.scoreComponents}; individual finding points below are pre-cap weights.")
                 app.permissions.forEach { appendLine("Permission: ${it.name}; ${it.protection}; declared=${it.declared}; granted=${it.granted}; AppOps=${it.appOp}; special=${it.specialState}; source=${it.evidence}") }
                 app.analysis.endpoints.forEach { appendLine("Endpoint: ${clean(it.value)}; ${it.provider}; ${it.category}; ${it.evidence.level}; source=${it.evidence.source}") }
                 app.analysis.sdks.forEach { appendLine("SDK: ${it.name}; signature=${it.signature}; source=${it.source}") }

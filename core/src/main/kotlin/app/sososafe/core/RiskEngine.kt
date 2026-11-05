@@ -12,10 +12,11 @@ object RiskEngine {
         }.distinctBy { Triple(it.dataType,it.host,it.permission) }.take(501).toList()
         val unique=findings.distinctBy { it.id }
         // Cap each independent family so a long manifest cannot dominate the score.
-        val score=minOf(35,unique.filter { it.id.startsWith("permission:") }.sumOf { it.points })+
-            minOf(30,unique.filter { it.id.startsWith("manifest:") }.sumOf { it.points })+
-            minOf(20,unique.filter { it.id.startsWith("dex:") }.sumOf { it.points })+
-            minOf(15,unique.filter { !it.id.startsWith("permission:") && !it.id.startsWith("manifest:") && !it.id.startsWith("dex:") }.sumOf { it.points })
-        return app.copy(findings=unique,exposures=links.take(500),riskScore=score.coerceIn(0,100),limitations=(app.limitations+if(links.size>500)listOf("Exposure correlation list capped at 500 pairs; underlying permission and endpoint records are retained.")else emptyList()).distinct())
+        val components=linkedMapOf(
+            "permissions (cap 35)" to minOf(35,unique.filter { it.id.startsWith("permission:") }.sumOf { it.points }),
+            "manifest (cap 30)" to minOf(30,unique.filter { it.id.startsWith("manifest:") }.sumOf { it.points }),
+            "dex (cap 20)" to minOf(20,unique.filter { it.id.startsWith("dex:") }.sumOf { it.points }),
+            "other (cap 15)" to minOf(15,unique.filter { !it.id.startsWith("permission:") && !it.id.startsWith("manifest:") && !it.id.startsWith("dex:") }.sumOf { it.points }))
+        return app.copy(findings=unique,exposures=links.take(500),riskScore=components.values.sum().coerceIn(0,100),scoreComponents=components,limitations=(app.limitations+if(links.size>500)listOf("Exposure correlation list capped at 500 pairs; underlying permission and endpoint records are retained.")else emptyList()).distinct())
     }
 }

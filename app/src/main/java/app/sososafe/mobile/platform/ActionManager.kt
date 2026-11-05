@@ -59,7 +59,7 @@ class ActionManager(private val context:Context,private val repo:AuditRepository
                 "DISABLE" -> {
                     check(context.packageManager.getApplicationEnabledSetting(plan.app.packageName).toString()==plan.original){"Enabled state changed; prepare again"}
                     access.execute(plan.mode,Commands.enabled(plan.app.packageName,false,plan.userId)).checked()
-                    check(context.packageManager.getApplicationEnabledSetting(plan.app.packageName)==3){"Disabled state not confirmed"};"SUCCESS"
+                    check(context.packageManager.getApplicationEnabledSetting(plan.app.packageName)==PackageManager.COMPONENT_ENABLED_STATE_DISABLED_USER){"Disabled state not confirmed"};"SUCCESS"
                 }
                 "UNINSTALL" -> { backup(plan);"AWAITING_SYSTEM_CONFIRMATION" }
                 else -> error("Unsupported action")

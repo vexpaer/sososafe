@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">sososafe</string>
+    <string name="monitor_channel">本地网络监控</string>
+    <string name="monitor_title">sososafe 正在本地监控</string>
+    <string name="monitor_body">仅记录元数据 · 点击停止可断开</string>
+    <string name="stop">停止</string>
+</resources>

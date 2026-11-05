@@ -1,0 +1,79 @@
+name: Android Release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (v1.0.0)
+        required: true
+        default: v1.0.0
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+      SIGNING_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+      SIGNING_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+      SIGNING_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+      SIGNING_KEYSTORE_PATH: ${{ github.workspace }}/release-signing.jks
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Require production signing secrets
+        run: |
+          for key in KEYSTORE_BASE64 SIGNING_STORE_PASSWORD SIGNING_KEY_ALIAS SIGNING_KEY_PASSWORD; do
+            if [ -z "${!key}" ]; then echo "::error::Missing signing secret: $key. Debug CI is independent of release secrets."; exit 1; fi
+          done
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$SIGNING_KEYSTORE_PATH"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.6.0'
+      - run: sdkmanager 'platforms;android-37' 'build-tools;36.0.0' 'ndk;28.2.13676358'
+      - name: Build forwarding engine
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/28.2.13676358
+        run: bash scripts/build-native.sh
+      - name: Test, Lint and signed release APK
+        run: |
+          chmod +x gradlew
+          set -o pipefail
+          ./gradlew :core:test :app:testReleaseUnitTest :app:lintRelease :app:assembleRelease --stacktrace 2>&1 | tee release-build.log
+      - name: Verify signature and prepare download
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/release/app-release.apk dist/sososafe.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose dist/sososafe.apk
+          cd dist && sha256sum sososafe.apk > sososafe.apk.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sososafe-release
+          path: dist/*
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]] || { echo 'Invalid release tag'; exit 1; }
+          gh release create "$RELEASE_TAG" dist/sososafe.apk dist/sososafe.apk.sha256 --target "$GITHUB_SHA" --title "sososafe $RELEASE_TAG" --generate-notes
+      - name: Build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sososafe-release-verification
+          path: |
+            **/build/reports/
+            **/build/test-results/
+            release-build.log
+      - name: Remove temporary signing key
+        if: always()
+        run: rm -f -- "$SIGNING_KEYSTORE_PATH"

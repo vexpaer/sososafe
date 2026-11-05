@@ -1,0 +1,100 @@
+name: Android CI
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: android-ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.6.0'
+      - name: Install pinned SDK and NDK
+        run: sdkmanager 'platforms;android-37' 'build-tools;36.0.0' 'ndk;28.2.13676358'
+      - name: Build local forwarding engine
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/28.2.13676358
+        run: bash scripts/build-native.sh 2>&1 | tee native-build.log
+      - name: Test, Lint and assemble
+        run: |
+          chmod +x gradlew
+          set -o pipefail
+          ./gradlew :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace 2>&1 | tee android-build.log
+      - name: Prepare APK and checksum
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk dist/sososafe.apk
+          cd dist && sha256sum sososafe.apk > sososafe.apk.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sososafe-debug
+          path: dist/*
+          if-no-files-found: error
+      - name: Upload tests, Lint and build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sososafe-verification
+          path: |
+            **/build/reports/
+            **/build/test-results/
+            app/schemas/
+            android-build.log
+            native-build.log
+  emulator:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.6.0'
+      - uses: actions/download-artifact@v4
+        with:
+          name: sososafe-debug
+          path: dist
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install SDK
+        run: sdkmanager 'platforms;android-37' 'build-tools;36.0.0'
+      - name: Emulator launch, scan, UI and IPv4 / IPv6 forwarding tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: bash scripts/emulator-test.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sososafe-device-verification
+          path: |
+            artifacts/
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/

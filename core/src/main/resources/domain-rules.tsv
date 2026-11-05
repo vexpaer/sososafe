@@ -1,0 +1,47 @@
+# domain provider category tracker — curated offline signatures; exact host or dot-bound suffix only
+google-analytics.com	Google	Analytics	true
+app-measurement.com	Google / Firebase	Analytics	true
+firebaseanalytics.com	Firebase	Analytics	true
+doubleclick.net	Google	Advertising	true
+googlesyndication.com	Google	Advertising	true
+googleadservices.com	Google	Advertising	true
+firebaseio.com	Firebase	Cloud	false
+firebaseinstallations.googleapis.com	Firebase	Functional	false
+crashlytics.com	Firebase Crashlytics	Crash Reporting	true
+firebase-settings.crashlytics.com	Firebase Crashlytics	Crash Reporting	true
+facebook.com	Meta / Facebook	Social	false
+graph.facebook.com	Meta / Facebook	Social	false
+facebook.net	Meta / Facebook	Social	false
+tiktok.com	TikTok	Social	false
+tiktokv.com	ByteDance / TikTok	Cloud	false
+byteoversea.com	ByteDance	Cloud	false
+snssdk.com	ByteDance	Telemetry	true
+zijieapi.com	ByteDance	Telemetry	true
+pangle.io	ByteDance	Advertising	true
+oceanengine.com	ByteDance	Advertising	true
+qq.com	Tencent	Functional	false
+tencent.com	Tencent	Cloud	false
+weixin.qq.com	Tencent	Social	false
+alibaba.com	Alibaba	Functional	false
+aliyuncs.com	Alibaba	Cloud	false
+alipay.com	Alibaba	Payment	false
+amap.com	Alibaba / Amap	Location	false
+baidu.com	Baidu	Functional	false
+hm.baidu.com	Baidu	Analytics	true
+xiaomi.com	Xiaomi	Functional	false
+tracking.miui.com	Xiaomi	Telemetry	true
+huawei.com	Huawei	Functional	false
+hicloud.com	Huawei	Cloud	false
+umeng.com	Umeng	Analytics	true
+umengcloud.com	Umeng	Analytics	true
+appsflyer.com	AppsFlyer	Analytics	true
+adjust.com	Adjust	Analytics	true
+adjust.io	Adjust	Analytics	true
+unityads.unity3d.com	Unity Ads	Advertising	true
+unityads.unity.com	Unity Ads	Advertising	true
+applovin.com	AppLovin	Advertising	true
+applvn.com	AppLovin	Advertising	true
+sentry.io	Sentry	Crash Reporting	true
+accounts.google.com	Google	Authentication	false
+googleapis.com	Google	Cloud	false
+google.com	Google	Functional	false

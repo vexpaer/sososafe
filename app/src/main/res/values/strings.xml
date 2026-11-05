@@ -1,0 +1,12 @@
+<resources>
+    <string name="app_name">sososafe</string>
+    <string name="monitor_channel">Local network monitor</string>
+    <string name="monitor_title">sososafe is monitoring locally</string>
+    <string name="monitor_body">Metadata only · Tap Stop to disconnect</string>
+    <string name="stop">Stop</string>
+    <style name="Theme.SosoSafe" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowActionModeOverlay">true</item>
+    </style>
+</resources>

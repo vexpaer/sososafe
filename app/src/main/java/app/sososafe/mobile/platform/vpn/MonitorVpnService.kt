@@ -29,6 +29,7 @@ class MonitorVpnService:VpnService() {
         if(intent?.action==STOP){stopMonitor();return START_NOT_STICKY}
         if(tun!=null)return START_NOT_STICKY
         try {
+            if(android.os.Build.VERSION.SDK_INT>=37)check(checkSelfPermission("android.permission.ACCESS_LOCAL_NETWORK")==android.content.pm.PackageManager.PERMISSION_GRANTED){"Local network permission is required. Restart monitoring from the app."}
             val manager=getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(NotificationChannel("monitor",getString(R.string.monitor_channel),NotificationManager.IMPORTANCE_LOW))
             val stop=PendingIntent.getService(this,2,Intent(this,MonitorVpnService::class.java).setAction(STOP),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
@@ -43,8 +44,8 @@ class MonitorVpnService:VpnService() {
             proxy=LocalSocksProxy(user,pass,::tcp,::udp)
             val dns=underlying?.let{cm.getLinkProperties(it)?.dnsServers}.orEmpty().filter{!it.isAnyLocalAddress && !it.isLoopbackAddress}
             val builder=Builder().setSession("sososafe · local metadata monitor").setMtu(1500).addAddress("10.82.0.1",32).addAddress("fd82:5afe::1",128).addRoute("0.0.0.0",0).addRoute("::",0).addDisallowedApplication(packageName).setBlocking(false)
-            (dns.ifEmpty{listOf(java.net.InetAddress.getByName("1.1.1.1"),java.net.InetAddress.getByName("2606:4700:4700::1111"))}).forEach{builder.addDnsServer(it)}
-            // DNS is forwarded to the current network's resolver; the fallback is disclosed in the UI.
+            check(dns.isNotEmpty()){ "No network DNS resolver available. Connect to Wi-Fi or mobile data and retry." }
+            dns.forEach{builder.addDnsServer(it)}
             tun=checkNotNull(builder.establish()){"Android VPN consent is missing or another VPN conflicts"}
             setUnderlyingNetworks(underlying?.let{arrayOf(it)})
             val app=application as SosoApplication

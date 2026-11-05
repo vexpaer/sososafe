@@ -1,153 +1,56 @@
+/* NOIR AXML reader, Copyright (c) 2026 Verlintas, MIT.
+ * sososafe adaptation: strict chunk/string/attribute bounds and typed references. */
 package app.noir.core.apk
 
-/**
- * Minimal Android binary XML (AXML) reader.
- *
- * Only what a manifest audit needs: element names, attributes and nesting depth.
- * Deliberately dependency-free — the popular apk-parser library fails on some
- * system APKs with `newPosition > limit`.
- */
 object Axml {
-
-    data class Node(val name: String, val attrs: Map<String, String?>, val depth: Int)
-
-    fun parse(bytes: ByteArray): List<Node> {
-        if (bytes.size < 8) return emptyList()
-
-        var strings: List<String> = emptyList()
-        val nodes = ArrayList<Node>()
-        var depth = 0
-        var offset = 8
-
-        while (offset + 8 <= bytes.size) {
-            val type = u16(bytes, offset)
-            val headerSize = u16(bytes, offset + 2)
-            val size = u32(bytes, offset + 4)
-            if (size <= 0 || offset + size > bytes.size) break
-
-            when (type) {
-                CHUNK_STRING_POOL -> strings = stringPool(bytes, offset)
-                CHUNK_START_ELEMENT -> {
-                    startElement(bytes, offset, headerSize, strings, depth)?.let { nodes.add(it) }
-                    depth++
+    data class Node(val name:String,val attrs:Map<String,String?>,val depth:Int)
+    fun parse(bytes:ByteArray):List<Node> {
+        require(bytes.size>=8 && u16(bytes,0)==3){"Invalid binary XML header"}
+        val rootSize=u32(bytes,4);require(rootSize in 8..bytes.size)
+        var strings:List<String> = emptyList();val nodes=mutableListOf<Node>();var depth=0;var offset=u16(bytes,2)
+        require(offset in 8..rootSize)
+        while(offset<rootSize){
+            require(offset+8<=rootSize)
+            val type=u16(bytes,offset);val header=u16(bytes,offset+2);val size=u32(bytes,offset+4)
+            require(header>=8 && size>=header && size<=rootSize-offset){"Malformed XML chunk"}
+            when(type){
+                1->strings=stringPool(bytes,offset,size,header)
+                0x102->{
+                    require(header>=16 && size>=36 && depth<=256 && nodes.size<100000)
+                    val name=u32(bytes,offset+20);val start=u16(bytes,offset+24);val width=u16(bytes,offset+26);val count=u16(bytes,offset+28)
+                    require(width>=20 && start>=20)
+                    val first=offset+header+start
+                    require(first<=offset+size && count.toLong()*width<=offset+size-first)
+                    val attrs=linkedMapOf<String,String?>()
+                    repeat(count){i->
+                        val a=first+i*width;val namespace=u32(bytes,a);val key=strings.getOrNull(u32(bytes,a+4)) ?: error("Invalid attribute name")
+                        val raw=u32(bytes,a+8);val kind=bytes[a+15].toInt() and 255;val data=u32(bytes,a+16)
+                        if(namespace==-1 || strings.getOrNull(namespace)=="http://schemas.android.com/apk/res/android"){
+                            attrs[key]=when(kind){3->strings.getOrNull(data) ?: error("Invalid string index");0x12->(data!=0).toString();0x10,0x11->data.toString();1->"@0x"+data.toUInt().toString(16).padStart(8,'0');else->strings.getOrNull(raw)}
+                        }
+                    }
+                    nodes+=Node(strings.getOrNull(name) ?: error("Invalid element name"),attrs,depth);depth++
                 }
-                CHUNK_END_ELEMENT -> if (depth > 0) depth--
+                0x103->{require(depth>0);depth--}
             }
-
-            // headerSize is not used directly, but a zero size would loop forever
-            if (size < 8) break
-            offset += size
+            offset+=size
         }
-
-        return nodes
+        require(depth==0){"Unclosed XML elements"};return nodes
     }
-
-    private const val CHUNK_STRING_POOL = 0x0001
-    private const val CHUNK_START_ELEMENT = 0x0102
-    private const val CHUNK_END_ELEMENT = 0x0103
-
-    private fun startElement(
-        bytes: ByteArray,
-        offset: Int,
-        headerSize: Int,
-        strings: List<String>,
-        depth: Int
-    ): Node? {
-        if (offset + 36 > bytes.size) return null
-        val nameIndex = u32(bytes, offset + 20)
-        val attrStart = u16(bytes, offset + 24)
-        val attrSize = u16(bytes, offset + 26)
-        val attrCount = u16(bytes, offset + 28)
-        if (attrSize < 20) return null
-
-        val attrs = LinkedHashMap<String, String?>()
-        // attributeStart is relative to the attrExt struct, which follows the chunk header.
-        var attr = offset + headerSize + attrStart
-        repeat(attrCount) {
-            if (attr + 20 > bytes.size) return@repeat
-            val attrName = u32(bytes, attr + 4)
-            val rawValue = u32(bytes, attr + 8)
-            val dataType = bytes[attr + 15].toInt() and 0xFF
-            val data = u32(bytes, attr + 16)
-
-            val key = strings.getOrNull(attrName).orEmpty()
-            if (key.isNotEmpty()) {
-                attrs[key] = when (dataType) {
-                    TYPE_STRING -> strings.getOrNull(data)
-                    TYPE_INT_BOOLEAN -> if (data != 0) "true" else "false"
-                    TYPE_INT_DEC, TYPE_INT_HEX -> data.toString()
-                    else -> if (rawValue in strings.indices) strings[rawValue] else null
-                }
-            }
-            attr += attrSize
+    private fun stringPool(b:ByteArray,o:Int,size:Int,header:Int):List<String>{
+        require(header>=28 && o+28<=b.size)
+        val count=u32(b,o+8);val utf8=u32(b,o+16) and 0x100!=0;val start=u32(b,o+20)
+        require(count in 0..1000000 && count.toLong()*4<=size-header && start in header..size)
+        val end=o+size
+        fun decode(at:Int):String{
+            var p=at;require(p in (o+start) until end)
+            fun length8():Int{require(p<end);val first=b[p++].toInt() and 255;return if(first and 128==0)first else{require(p<end);((first and 127) shl 8) or (b[p++].toInt() and 255)}}
+            fun length16():Int{require(p+2<=end);val first=u16(b,p);p+=2;return if(first and 0x8000==0)first else{require(p+2<=end);val next=u16(b,p);p+=2;((first and 0x7fff) shl 16) or next}}
+            if(utf8){length8();val n=length8();require(n<=end-p);return String(b,p,n,Charsets.UTF_8)}
+            val n=length16().toLong()*2;require(n in 0..(end-p).toLong());return String(b,p,n.toInt(),Charsets.UTF_16LE)
         }
-
-        return Node(strings.getOrNull(nameIndex).orEmpty(), attrs, depth)
+        return (0 until count).map{i->val relative=u32(b,o+header+i*4);require(relative>=0 && relative<size-start);decode(o+start+relative)}
     }
-
-    private fun stringPool(bytes: ByteArray, offset: Int): List<String> {
-        if (offset + 28 > bytes.size) return emptyList()
-        val count = u32(bytes, offset + 8)
-        val flags = u32(bytes, offset + 16)
-        val stringsStart = offset + u32(bytes, offset + 20)
-        val utf8 = (flags and 0x100) != 0
-        if (count <= 0 || count > 1_000_000) return emptyList()
-
-        val result = ArrayList<String>(count)
-        for (i in 0 until count) {
-            val entry = stringsStart + u32(bytes, offset + 28 + i * 4)
-            result.add(if (utf8) readUtf8(bytes, entry) else readUtf16(bytes, entry))
-        }
-        return result
-    }
-
-    private fun readUtf8(bytes: ByteArray, start: Int): String {
-        var p = start
-        if (p + 2 > bytes.size) return ""
-        var skip = bytes[p].toInt() and 0xFF
-        p++
-        if (skip and 0x80 != 0) {
-            if (p >= bytes.size) return ""
-            skip = ((skip and 0x7F) shl 8) or (bytes[p].toInt() and 0xFF)
-            p++
-        }
-        var length = bytes[p].toInt() and 0xFF
-        p++
-        if (length and 0x80 != 0) {
-            if (p >= bytes.size) return ""
-            length = ((length and 0x7F) shl 8) or (bytes[p].toInt() and 0xFF)
-            p++
-        }
-        if (p + length > bytes.size || length < 0) return ""
-        return String(bytes, p, length, Charsets.UTF_8)
-    }
-
-    private fun readUtf16(bytes: ByteArray, start: Int): String {
-        var p = start
-        if (p + 2 > bytes.size) return ""
-        var length = u16(bytes, p)
-        p += 2
-        if (length and 0x8000 != 0) {
-            if (p + 2 > bytes.size) return ""
-            length = ((length and 0x7FFF) shl 16) or u16(bytes, p)
-            p += 2
-        }
-        val byteLength = length * 2
-        if (byteLength < 0 || p + byteLength > bytes.size) return ""
-        return String(bytes, p, byteLength, Charsets.UTF_16LE)
-    }
-
-    private fun u16(bytes: ByteArray, offset: Int): Int =
-        (bytes[offset].toInt() and 0xFF) or ((bytes[offset + 1].toInt() and 0xFF) shl 8)
-
-    private fun u32(bytes: ByteArray, offset: Int): Int =
-        (bytes[offset].toInt() and 0xFF) or
-            ((bytes[offset + 1].toInt() and 0xFF) shl 8) or
-            ((bytes[offset + 2].toInt() and 0xFF) shl 16) or
-            ((bytes[offset + 3].toInt() and 0xFF) shl 24)
-
-    private const val TYPE_STRING = 0x03
-    private const val TYPE_INT_DEC = 0x10
-    private const val TYPE_INT_HEX = 0x11
-    private const val TYPE_INT_BOOLEAN = 0x12
+    private fun u16(b:ByteArray,o:Int):Int{require(o>=0 && o+2<=b.size);return (b[o].toInt() and 255) or ((b[o+1].toInt() and 255) shl 8)}
+    private fun u32(b:ByteArray,o:Int):Int{require(o>=0 && o+4<=b.size);return u16(b,o) or (u16(b,o+2) shl 16)}
 }

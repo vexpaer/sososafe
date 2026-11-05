@@ -38,7 +38,8 @@ class TrafficRecorder(private val context:Context,private val repo:AuditReposito
                         if(message.response) message.addresses.forEach{(name,ips)->ips.forEach{dns[it]=name to now}}
                     }
                 }
-                val domain=dns[remote]?.takeIf{now-it.second<300000}?.first ?: query.firstOrNull() ?: old?.domain
+                val dnsHost=dns[remote]?.takeIf{now-it.second<300000}?.first
+                val domain=dnsHost ?: query.firstOrNull() ?: old?.domain
                 val rule=DomainRules.classify(domain ?: remote)
                 val syn=p.protocol==6 && outbound && p.tcpFlags and 2!=0 && p.tcpFlags and 16==0
                 val state=when {p.protocol==6 && p.tcpFlags and 4!=0 -> "RESET";p.protocol==6 && p.tcpFlags and 1!=0 -> "CLOSING";else->"ACTIVE"}
@@ -47,8 +48,9 @@ class TrafficRecorder(private val context:Context,private val repo:AuditReposito
                     domain=domain,provider=rule.provider,category=rule.category,tracker=rule.tracker,
                     uploaded=(old?.uploaded ?: 0)+if(outbound)p.length else 0,
                     downloaded=(old?.downloaded ?: 0)+if(outbound)0 else p.length,
-                    packets=(old?.packets ?: 0)+1,connections=(old?.connections ?: 0)+if(old==null || (syn && now-old.lastSeen>10000))1 else 0,
-                    dnsQueries=(old?.dnsQueries.orEmpty()+query).distinct().take(100),state=state)
+                    packets=(old?.packets ?: 0)+1,connections=(old?.connections ?: 0)+if(old==null || (syn && (old.state in setOf("RESET","CLOSING") || now-old.lastSeen>10000)))1 else 0,
+                    dnsQueries=(old?.dnsQueries.orEmpty()+query).distinct().take(100),state=state,
+                    domainEvidence=if(dnsHost!=null)"DNS_ANSWER_IP_ASSOCIATION: shared IPs may be ambiguous" else if(query.isNotEmpty())"DNS_QUESTION_ONLY: does not prove a connection to the named host"else old?.domainEvidence)
                 flows[key]=record;dirty+=key
                 // Bounded memory. Dirty rows are flushed; admission pauses if the writer is behind.
                 if(flows.size>10000){val first=flows.entries.firstOrNull{it.key !in dirty};if(first!=null)flows.remove(first.key)else{flows.remove(key);dirty.remove(key);dropped++}}

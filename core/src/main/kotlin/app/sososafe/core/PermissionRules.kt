@@ -11,7 +11,7 @@ object PermissionRules {
         "Calendar" to listOf("READ_CALENDAR", "WRITE_CALENDAR"),
         "Files" to listOf("MANAGE_EXTERNAL_STORAGE", "READ_MEDIA_IMAGES", "READ_MEDIA_VIDEO", "READ_MEDIA_AUDIO", "READ_MEDIA_VISUAL_USER_SELECTED"),
         "Storage" to listOf("READ_EXTERNAL_STORAGE", "WRITE_EXTERNAL_STORAGE"),
-        "Nearby Devices" to listOf("NEARBY_WIFI_DEVICES", "UWB_RANGING"),
+        "Nearby Devices" to listOf("NEARBY_WIFI_DEVICES", "UWB_RANGING", "ACCESS_LOCAL_NETWORK"),
         "Bluetooth" to listOf("BLUETOOTH", "BLUETOOTH_ADMIN", "BLUETOOTH_SCAN", "BLUETOOTH_CONNECT", "BLUETOOTH_ADVERTISE"),
         "Notifications" to listOf("POST_NOTIFICATIONS", "BIND_NOTIFICATION_LISTENER_SERVICE"),
         "Accessibility" to listOf("BIND_ACCESSIBILITY_SERVICE"),

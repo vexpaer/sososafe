@@ -36,7 +36,8 @@ object ManifestParser {
             val hasFilter=nodes.drop(index+1).takeWhile { it.depth>n.depth }.any { it.name=="intent-filter" }
             val defaultExport=if(n.name=="provider") (target ?: 1)<17 else hasFilter
             val permission=n.attrs["permission"]?.takeIf { it.isNotBlank() } ?: appPerm
-            Component(n.name,n.attrs["name"].orEmpty(),n.attrs["exported"]?.toBooleanStrictOrNull() ?: defaultExport,permission,n.attrs["authorities"])
+            val children=nodes.drop(index+1).takeWhile{it.depth>n.depth}
+            Component(n.name,n.attrs["name"].orEmpty(),n.attrs["exported"]?.toBooleanStrictOrNull() ?: defaultExport,permission,n.attrs["authorities"],n.attrs["readPermission"] ?: permission,n.attrs["writePermission"] ?: permission,children.any{it.name=="path-permission"})
         }
         return ManifestResult(
             nodes.firstOrNull { it.name=="manifest" }?.attrs?.get("package").orEmpty(),
@@ -53,7 +54,7 @@ object ManifestParser {
         if(m.allowBackup==true) addFact("manifest:backup","Backup is permitted",2,"allowBackup=true (explicit or platform default). Data extraction rules and OEM behavior can narrow actual backup.","Review device backup and the app's data extraction rules.")
         if(m.cleartext==true) addFact("manifest:cleartext","Cleartext traffic permitted",7,"usesCleartextTraffic=true/effective target default; network security config may override this.","This is permission to use cleartext, not proof that it is used.")
         if((m.targetSdk ?: 99)<28) addFact("manifest:target","Legacy target SDK",5,"targetSdk=${m.targetSdk}","Look for a maintained app version.")
-        m.components.filter { it.exported && it.permission.isNullOrBlank() }.forEach {
+        m.components.filter { it.exported && it.permission.isNullOrBlank() && (it.kind!="provider" || (it.readPermission.isNullOrBlank() || it.writePermission.isNullOrBlank())) }.forEach {
             addFact("manifest:${it.kind}:${it.name}","Exported ${it.kind} without component permission",if(it.kind=="activity" || it.kind=="activity-alias") 1 else 4,"${it.name}; exported=true; no inherited application permission. Providers may have read/write or path permissions, and code may enforce access.","Review the public interface; exported components can be intentional.")
         }
     }

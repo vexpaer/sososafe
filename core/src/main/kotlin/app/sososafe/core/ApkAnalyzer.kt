@@ -60,7 +60,7 @@ object ApkAnalyzer {
                 "Landroid/service/notification/NotificationListenerService;" -> feature("dex:notification","Notification listener implementation",4,c.type)
                 "Landroid/app/admin/DeviceAdminReceiver;" -> feature("dex:admin","Device administrator implementation",4,c.type)
             }
-            for(m in c.methods) for(i in m.implementation?.instructions.orEmpty()) {
+            for(m in c.methods) for(i in (m.implementation?.instructions ?: emptyList())) {
                 val ref=(i as? ReferenceInstruction)?.reference as? MethodReference ?: continue
                 val key="${ref.definingClass}->${ref.name}"
                 methods[key]?.let { (title,points) -> feature("dex:$key",title,points,"${c.type}->${m.name} invokes $key") }
@@ -86,13 +86,14 @@ object ApkAnalyzer {
                         checkpoint()
                         val source="${apk.name}:${e.name}"
                         try {
-                            val result=dex(zip.getInputStream(e).use { readLimited(it,128*1024*1024) },source)
+                            val budget=minOf(128L*1024*1024,Runtime.getRuntime().maxMemory()/4).toInt()
+                            val result=dex(zip.getInputStream(e).use { readLimited(it,budget) },source)
                             result.endpoints.forEach { if(endpoints.size<5000) endpoints[it.value]=it }
                             result.sdks.forEach { sdks[it.name]=it }; result.findings.forEach { findings[it.id]=it }; files+=source
-                        } catch(e:Exception) { limits+="$source: ${e.javaClass.simpleName}: ${e.message?.take(200)}" }
+                        } catch(e:Exception) { if(e is java.util.concurrent.CancellationException)throw e;limits+="$source: ${e.javaClass.simpleName}: ${e.message?.take(200)}" }
                     }
                 }
-            } catch(e:Exception) { limits+="${apk.name}: ${e.javaClass.simpleName}: ${e.message?.take(200)}" }
+            } catch(e:Exception) { if(e is java.util.concurrent.CancellationException)throw e;limits+="${apk.name}: ${e.javaClass.simpleName}: ${e.message?.take(200)}" }
         }
         limits += "Static signatures cannot inspect native code, encrypted strings, reflection targets or downloaded code."
         return StaticResult(manifest,endpoints.values.toList(),sdks.values.toList(),findings.values.toList(),files,limits)

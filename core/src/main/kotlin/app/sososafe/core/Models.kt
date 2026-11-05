@@ -18,7 +18,7 @@ import kotlinx.serialization.Serializable
 )
 @Serializable data class SdkFinding(val name: String, val category: String, val signature: String, val source: String)
 @Serializable data class Finding(val id: String, val title: String, val severity: Severity, val points: Int, val evidence: Evidence, val recommendation: String)
-@Serializable data class Component(val kind: String, val name: String, val exported: Boolean, val permission: String?, val authorities: String? = null)
+@Serializable data class Component(val kind: String, val name: String, val exported: Boolean, val permission: String?, val authorities: String? = null,val readPermission:String?=null,val writePermission:String?=null,val pathProtected:Boolean=false)
 @Serializable data class ManifestResult(
     val packageName: String = "", val permissions: List<String> = emptyList(),
     val targetSdk: Int? = null, val allowBackup: Boolean? = null,
@@ -49,7 +49,8 @@ import kotlinx.serialization.Serializable
     val attribution: String = "UNKNOWN", val domain: String? = null,
     val provider: String = "Unknown", val category: String = "Unknown", val tracker: Boolean = false,
     val uploaded: Long = 0, val downloaded: Long = 0, val packets: Long = 0,
-    val connections: Int = 0, val dnsQueries: List<String> = emptyList(), val state: String = "OBSERVED"
+    val connections: Int = 0, val dnsQueries: List<String> = emptyList(), val state: String = "OBSERVED",
+    val domainEvidence:String?=null
 )
 @Serializable data class ActionRecord(
     val id: String, val packageName: String, val action: String, val argument: String = "",

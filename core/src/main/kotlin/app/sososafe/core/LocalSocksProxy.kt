@@ -13,7 +13,8 @@ import java.util.concurrent.TimeUnit
 /** RFC 1928/1929 local relay. No remote SOCKS server or TLS interception. */
 class LocalSocksProxy(
     private val username:String,private val password:String,
-    private val protectTcp:(Socket)->Unit={},private val protectUdp:(DatagramSocket)->Unit={}
+    private val protectTcp:(Socket)->Unit={},private val protectUdp:(DatagramSocket)->Unit={},
+    private val routeAddress:(InetAddress)->InetAddress={it}
 ):Closeable {
     private val executor=Executors.newCachedThreadPool()
     private val resources=ConcurrentHashMap.newKeySet<Closeable>()
@@ -51,7 +52,7 @@ class LocalSocksProxy(
                 val remote=Socket();resources+=remote
                 var accepted=false
                 try {
-                    protectTcp(remote);remote.tcpNoDelay=true;remote.connect(InetSocketAddress(host,port),15000)
+                    protectTcp(remote);remote.tcpNoDelay=true;remote.connect(InetSocketAddress(routeAddress(host),port),15000)
                     reply(output,0);accepted=true;client.soTimeout=0
                     val up=executor.submit {try{client.getInputStream().copyTo(remote.getOutputStream())}catch(_:Exception){}finally{runCatching{remote.shutdownOutput()}}}
                     try{remote.getInputStream().copyTo(output);output.flush()}finally{runCatching{client.shutdownOutput()};up.get(10,TimeUnit.SECONDS)}
@@ -86,7 +87,7 @@ class LocalSocksProxy(
                     if(remote==null) {
                         if(!flowLimit.tryAcquire())continue
                         val created=DatagramSocket(null);resources+=created
-                        try {protectUdp(created);created.bind(InetSocketAddress(0));created.connect(target,targetPort);created.soTimeout=30000}
+                        try {protectUdp(created);created.bind(InetSocketAddress(0));created.connect(routeAddress(target),targetPort);created.soTimeout=30000}
                         catch(e:Exception){resources.remove(created);created.close();flowLimit.release();throw e}
                         flows[key]=created;remote=created
                         executor.execute {
@@ -109,5 +110,6 @@ class LocalSocksProxy(
         try {while(running && control.getInputStream().read()!=-1){ /* SOCKS control connection lifetime */ }}
         finally{active.set(false);resources.remove(relay);relay.close();flows.values.forEach{it.close()};worker.cancel(true)}
     }
+    fun resetUpstreams(){resources.toList().filter{it!==server}.forEach{runCatching{it.close()}}}
     override fun close(){running=false;resources.toList().forEach{runCatching{it.close()}};resources.clear();executor.shutdownNow()}
 }

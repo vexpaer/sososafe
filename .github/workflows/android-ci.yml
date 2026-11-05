@@ -41,6 +41,11 @@ jobs:
       - name: Build local forwarding engine
         if: steps.native-cache.outputs.cache-hit != 'true'
         run: ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358" bash scripts/build-native.sh 2>&1 | tee native-build.log
+      - uses: actions/cache/save@v4
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        with:
+          path: app/src/main/jniLibs
+          key: native-ndk28-${{ runner.os }}-${{ hashFiles('native/**', 'scripts/build-native.sh', '.gitmodules') }}
       - name: Test, Lint and assemble
         run: |
           chmod +x gradlew

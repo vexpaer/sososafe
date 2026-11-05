@@ -241,7 +241,7 @@ private fun openSettings(context:android.content.Context,pkg:String){context.sta
         items(apps.filter{it.findings.isNotEmpty()}.sortedByDescending{it.riskScore}.take(30),key={it.packageName}){AppRow(it){onApp(it)}}
         item{Section(t("Action & rollback history","处置与回滚历史"))}
         if(records.isEmpty())item{Empty(Icons.Default.History,t("No device changes","暂无设备修改"),t("Confirmed changes and their original state appear here.","确认的修改及原始状态将保存在这里。"))}
-        items(records,key={it.id}){r->OutlinedCard(Modifier.fillMaxWidth()){Column(Modifier.padding(14.dp)){Text(r.packageName,style=MaterialTheme.typography.titleMedium);Text("${r.action} ${r.argument}\n${r.original} → ${r.desired}\n${r.result}\n${date(r.createdAt)} · ${r.mode} · user=${r.userId}",style=MaterialTheme.typography.bodyMedium);if(r.reversible && !r.rolledBack && (r.result.startsWith("SUCCESS") || r.result.startsWith("ROLLBACK_FAILED")))OutlinedButton(onClick={onRollback(r)}){Text(t("Review rollback","检查回滚"))}}}}
+        items(records,key={it.id}){r->OutlinedCard(Modifier.fillMaxWidth()){Column(Modifier.padding(14.dp)){Text(r.packageName,style=MaterialTheme.typography.titleMedium);Text("${r.action} ${r.argument}\n${r.original} → ${r.desired}\n${r.result}\n${date(r.createdAt)} · ${r.mode} · user=${r.userId}",style=MaterialTheme.typography.bodyMedium);if(r.canRollback)OutlinedButton(onClick={onRollback(r)}){Text(t("Review rollback","检查回滚"))}}}}
     }
 }
 
@@ -263,7 +263,14 @@ private fun openSettings(context:android.content.Context,pkg:String){context.sta
         item{Toggle(t("Include system applications","包含系统应用"),s.includeSystem){vm.set("system",it)}}
         item{Choice(t("Network history retention","网络记录保留时间"),s.retentionDays.toString(),listOf("1" to t("1 day","1 天"),"7" to t("7 days","7 天"),"30" to t("30 days","30 天"))){vm.retention(it.toInt())}}
         item{Text(t("The local Room database retains up to 20,000 recent connection tuples. Reports and preserved uninstall APKs remain private in app storage. Uninstalling sososafe removes this data.","本地 Room 数据库最多保留 20,000 条近期连接。报告与卸载前保留的 APK 位于应用私有存储。卸载 sososafe 将删除这些数据。"),style=MaterialTheme.typography.bodySmall);OutlinedButton(onClick=onClear){Text(t("Clear audit data","清除审计数据"))}}
-        item{Section(t("Reports","审计报告"));Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){listOf("json","md","txt").forEach{f->OutlinedButton(onClick={onExport(f)}){Text(f.uppercase())}}}
+        item {
+            Section(t("Reports","审计报告"))
+            Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                listOf("json","md","txt").forEach { format ->
+                    OutlinedButton(onClick={onExport(format)}) { Text(format.uppercase()) }
+                }
+            }
+        }
         item{OutlinedButton(onClick={context.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,Uri.parse("package:${context.packageName}")))}){Text(t("Allow APK recovery installs","允许安装用于恢复的 APK"))}}
         item{Section(t("Privacy & About","隐私与关于"))}
         item{Text(t("sososafe 1.0.0\nNo accounts, telemetry, ads or uploaded scans. All analysis is local. The local relay forwards only your device's requested traffic; no external VPN server is used. HTTPS is not decrypted and payloads are not retained. DNS query names, IPs, UID and app inventory can be sensitive. Use the stop notification to end monitoring at any time.","sososafe 1.0.0\n无需账户、无遥测、无广告、不上传扫描结果。所有分析均在本地进行。本地转发器只转发设备请求的网络流量，不使用外部 VPN 服务器。不解密 HTTPS，也不保存网络载荷。DNS 域名、IP、UID 与应用清单属于敏感信息。可随时通过通知停止监控。"))}

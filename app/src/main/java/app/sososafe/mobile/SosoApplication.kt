@@ -23,6 +23,10 @@ class SosoApplication:Application() {
                 val record=j.decodeFromString<app.sososafe.core.ScanRecord>(row.json)
                 if(record.status=="SCANNING")db.dao().scan(ScanEntity(row.id,row.time,j.encodeToString(app.sososafe.core.ScanRecord.serializer(),record.copy(status="INTERRUPTED",finishedAt=System.currentTimeMillis(),error="Process ended before scan completion"))))
             }
+            db.dao().allActions().forEach { row ->
+                val record=j.decodeFromString<app.sososafe.core.ActionRecord>(row.json)
+                if(record.result=="PENDING")actions.save(record.copy(result="INTERRUPTED_UNKNOWN"))
+            }
             while(isActive){val p=repo.settings.flow.first();db.dao().pruneConnections(System.currentTimeMillis()-p.retentionDays*86400000L);delay(3600000)}
         }
     }

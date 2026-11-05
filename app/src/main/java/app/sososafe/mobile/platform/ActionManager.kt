@@ -71,11 +71,14 @@ class ActionManager(private val context:Context,private val repo:AuditRepository
         val ai=context.packageManager.getApplicationInfo(plan.app.packageName,0)
         val paths=listOf(ai.sourceDir)+ai.splitSourceDirs.orEmpty()
         val dir=File(context.filesDir,"recovery/${plan.id}").apply{mkdirs()}
-        paths.forEachIndexed { i,path ->
-            val out=File(dir,"split-$i.apk");val source=File(path)
-            if(source.canRead()) source.copyTo(out,true) else access.copyApk(plan.mode,path,out)
-        }
-        check(dir.listFiles().orEmpty().sumOf{it.length()} > 0){"Could not preserve APK for rollback"}
+        try {
+            paths.forEachIndexed { i,path ->
+                val out=File(dir,"split-$i.apk");val source=File(path)
+                if(source.canRead()){check(source.length()<=512L*1024*1024){"APK exceeds recovery size limit"};source.copyTo(out,true)}else access.copyApk(plan.mode,path,out)
+                check(dir.listFiles().orEmpty().sumOf{it.length()}<=1024L*1024*1024){"Recovery APK set exceeds 1 GiB limit"}
+            }
+            check(dir.listFiles().orEmpty().sumOf{it.length()} > 0){"Could not preserve APK for rollback"}
+        }catch(e:Exception){dir.listFiles()?.forEach{it.delete()};dir.delete();throw e}
     }
     fun launchUninstall(record:ActionRecord) {
         require(record.action=="UNINSTALL" && record.result=="AWAITING_SYSTEM_CONFIRMATION")
@@ -88,18 +91,23 @@ class ActionManager(private val context:Context,private val repo:AuditRepository
         }
     }
     suspend fun rollback(record:ActionRecord)=withContext(Dispatchers.IO) {
-        check(record.reversible && !record.rolledBack && (record.result.startsWith("SUCCESS") || record.result.startsWith("ROLLBACK_FAILED")))
+        check(record.canRollback)
         check(record.userId==access.userId){"Rollback belongs to another Android user"}
         var reinstall=false
         val result=try {
             when(record.action) {
                 "APP_OP" -> {
-                    access.execute(record.mode,Commands.setOp(record.packageName,record.argument,record.original,record.userId)).checked()
+                    val before=access.execute(record.mode,Commands.op(record.packageName,record.argument,record.userId)).checked()
+                    val current=Commands.packageOpMode(before,record.argument)
+                    check(current==record.original || current==record.desired){"AppOp changed after this operation; review current settings before restoring"}
+                    if(current!=record.original)access.execute(record.mode,Commands.setOp(record.packageName,record.argument,record.original,record.userId)).checked()
                     val after=access.execute(record.mode,Commands.op(record.packageName,record.argument,record.userId)).checked()
                     check(Commands.packageOpMode(after,record.argument)==record.original){"Restored package mode not confirmed"}
                 }
                 "DISABLE" -> {
-                    access.execute(record.mode,Commands.restoreEnabled(record.packageName,record.original.toInt(),record.userId)).checked()
+                    val current=context.packageManager.getApplicationEnabledSetting(record.packageName).toString()
+                    check(current==record.original || current==record.desired){"Enabled state changed after this operation; review settings first"}
+                    if(current!=record.original)access.execute(record.mode,Commands.restoreEnabled(record.packageName,record.original.toInt(),record.userId)).checked()
                     check(context.packageManager.getApplicationEnabledSetting(record.packageName)==record.original.toInt()){ "Restored enabled state not confirmed" }
                 }
                 "UNINSTALL" -> {
@@ -109,6 +117,7 @@ class ActionManager(private val context:Context,private val repo:AuditRepository
                     val installer=context.packageManager.packageInstaller
                     val params=PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply{ setAppPackageName(record.packageName) }
                     val sessionId=installer.createSession(params)
+                    save(record.copy(result="REINSTALL_REQUESTED"))
                     installer.openSession(sessionId).use { session ->
                         files.forEach { f -> session.openWrite(f.name,0,f.length()).use { out -> f.inputStream().use { it.copyTo(out) };session.fsync(out) } }
                         val intent=Intent(context,InstallResultReceiver::class.java).putExtra("action_id",record.id)
@@ -122,7 +131,7 @@ class ActionManager(private val context:Context,private val repo:AuditRepository
             }
             if(reinstall) "REINSTALL_REQUESTED" else "RESTORED"
         } catch(e:Exception){"ROLLBACK_FAILED: ${e.message}"}
-        save(record.copy(rolledBack=result=="RESTORED",result=result))
+        if(result!="REINSTALL_REQUESTED")save(record.copy(rolledBack=result=="RESTORED",result=result))
     }
     suspend fun save(record:ActionRecord){dao.action(ActionEntity(record.id,record.createdAt,json.encodeToString(record)))}
 }

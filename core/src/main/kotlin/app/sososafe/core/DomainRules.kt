@@ -16,7 +16,7 @@ object DomainRules {
         }
     }
     fun normalize(value: String): String? = runCatching {
-        val host = if(value.contains("://")) URI(value).host else value.trim().trimEnd('.')
+        val host = if(value.contains("://")) URI(value).host else if('/' in value)URI("https://$value").host else value.trim().trimEnd('.')
         if(host.isNullOrEmpty() || ':' in host) return null
         val ascii = IDN.toASCII(host, IDN.USE_STD3_ASCII_RULES).lowercase(Locale.ROOT)
         ascii.takeIf { it.length <= 253 && it.contains('.') && it.split('.').all { l -> l.length in 1..63 } }
@@ -30,7 +30,9 @@ object DomainRules {
     private val bare = Regex("(?<![A-Za-z0-9_])(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z]{2,24}(?![A-Za-z0-9_])")
     fun extract(text: String, source: String): List<Endpoint> {
         val found = linkedMapOf<String, Endpoint>()
-        val values = urls.findAll(text).map { it.value }.toList() + if(text.length < 2048 && '/' !in text && ';' !in text && !text.startsWith("L")) bare.findAll(text).map { it.value }.toList() else emptyList()
+        val plain=text.trim()
+        val bareCandidate=plain.length<2048 && !plain.contains("://") && !plain.startsWith("L") && ';' !in plain && plain.none{it.isWhitespace()} && bare.matches(plain.substringBefore('/')) && !Regex("^(com|org|net|android|java|javax|kotlin|io)\\.").containsMatchIn(plain)
+        val values = urls.findAll(text).map { it.value }.toList() + if(bareCandidate)listOf(plain)else emptyList()
         for(value in values) {
             val host = normalize(value) ?: continue
             if(Domains.isIgnored(host) || host.endsWith(".java") || host.endsWith(".kt") || host.startsWith("android.") || host.startsWith("com.android.")) continue

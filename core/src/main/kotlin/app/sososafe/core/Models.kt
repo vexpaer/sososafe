@@ -57,7 +57,9 @@ import kotlinx.serialization.Serializable
     val original: String, val desired: String, val createdAt: Long,
     val result: String, val reversible: Boolean, val rolledBack: Boolean = false,
     val mode: ScanMode = ScanMode.STANDARD, val userId: Int = 0
-)
+) {
+    val canRollback:Boolean get()=reversible && !rolledBack && (result.startsWith("SUCCESS") || result.startsWith("ROLLBACK_FAILED") || result.startsWith("FAILED") || result=="INTERRUPTED_UNKNOWN")
+}
 @Serializable data class AuditReport(
     val schemaVersion: Int = 1, val product: String = "sososafe", val generatedAt: Long,
     val device: Map<String, String>, val mode: ScanMode, val apps: List<AppRecord>,

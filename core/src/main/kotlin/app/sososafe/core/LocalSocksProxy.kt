@@ -14,7 +14,8 @@ import java.util.concurrent.TimeUnit
 class LocalSocksProxy(
     private val username:String,private val password:String,
     private val protectTcp:(Socket)->Unit={},private val protectUdp:(DatagramSocket)->Unit={},
-    private val routeAddress:(InetAddress,Int)->InetAddress={address,_->address}
+    private val routeAddress:(InetAddress,Int)->InetAddress={address,_->address},
+    private val onFailure:(Exception)->Unit={}
 ):Closeable {
     private val executor=Executors.newCachedThreadPool()
     private val resources=ConcurrentHashMap.newKeySet<Closeable>()
@@ -26,7 +27,7 @@ class LocalSocksProxy(
         while(running) {
             val s=try {server.accept()}catch(e:Exception){break}
             if(!limit.tryAcquire()){s.close();continue}
-            resources+=s;executor.execute {try {serve(s)}catch(_:Exception){}finally{resources.remove(s);runCatching{s.close()};limit.release()}}
+            resources+=s;executor.execute {try {serve(s)}catch(e:Exception){if(running)onFailure(e)}finally{resources.remove(s);runCatching{s.close()};limit.release()}}
         }
     } }
     private fun DataInputStream.exact(n:Int):ByteArray { require(n in 0..65535);return ByteArray(n).also{readFully(it)} }
@@ -56,7 +57,7 @@ class LocalSocksProxy(
                     reply(output,0);accepted=true;client.soTimeout=0
                     val up=executor.submit {try{client.getInputStream().copyTo(remote.getOutputStream())}catch(_:Exception){}finally{runCatching{remote.shutdownOutput()}}}
                     try{remote.getInputStream().copyTo(output);output.flush()}finally{runCatching{client.shutdownOutput()};up.get(10,TimeUnit.SECONDS)}
-                }catch(e:Exception){if(!accepted)runCatching{reply(output,5)}}finally{resources.remove(remote);remote.close()}
+                }catch(e:Exception){if(running)onFailure(e);if(!accepted)runCatching{reply(output,5)}}finally{resources.remove(remote);remote.close()}
             }
             3 -> udpAssociation(client,output)
             else -> reply(output,7)

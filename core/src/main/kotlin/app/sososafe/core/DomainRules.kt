@@ -17,7 +17,8 @@ object DomainRules {
     }
     fun normalize(value: String): String? = runCatching {
         val host = if(value.contains("://")) URI(value).host else if('/' in value)URI("https://$value").host else value.trim().trimEnd('.')
-        if(host.isNullOrEmpty() || ':' in host) return null
+        if(host.isNullOrEmpty()) return null
+        if(':' in host || host.all{it.isDigit() || it=='.'})return SocketOwnership.address(host)
         val ascii = IDN.toASCII(host, IDN.USE_STD3_ASCII_RULES).lowercase(Locale.ROOT)
         ascii.takeIf { it.length <= 253 && it.contains('.') && it.split('.').all { l -> l.length in 1..63 } }
     }.getOrNull()
@@ -35,7 +36,7 @@ object DomainRules {
         val values = urls.findAll(text).map { it.value }.toList() + if(bareCandidate)listOf(plain)else emptyList()
         for(value in values) {
             val host = normalize(value) ?: continue
-            if(Domains.isIgnored(host) || host.endsWith(".java") || host.endsWith(".kt") || host.startsWith("android.") || host.startsWith("com.android.")) continue
+            if((Domains.isIgnored(host) && SocketOwnership.address(host)==null) || host.endsWith(".java") || host.endsWith(".kt") || host.startsWith("android.") || host.startsWith("com.android.")) continue
             val rule = classify(host)
             found[value] = Endpoint(host, value, rule.provider, rule.category, rule.tracker, Evidence(source, "DEX string reference: $value", EvidenceLevel.STATIC_REFERENCE))
         }

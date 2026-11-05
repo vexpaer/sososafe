@@ -26,6 +26,7 @@ python3 scripts/relay-fixture.py > artifacts/relay-fixture.log 2>&1 &
 FIXTURE_PID=$!
 cleanup() {
     adb logcat -d > artifacts/device-logcat.txt || true
+    adb shell run-as app.sososafe.mobile cat files/tunnel-debug.log > artifacts/tunnel-debug.log 2>/dev/null || true
     adb pull /sdcard/Android/data/app.sososafe.mobile/files artifacts/device-files >/dev/null 2>&1 || true
     adb exec-out screencap -p > artifacts/final-screen.png || true
     kill "$FIXTURE_PID" 2>/dev/null || true

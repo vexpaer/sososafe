@@ -43,17 +43,20 @@ object ApkAnalyzer {
         "Landroid/provider/Settings\$Secure;->getString" to ("Secure settings read" to 1)
     )
     data class DexResult(val endpoints: List<Endpoint>,val sdks: List<SdkFinding>,val findings: List<Finding>)
-    fun dex(bytes: ByteArray, source: String): DexResult {
+    fun dex(bytes: ByteArray, source: String, checkpoint:()->Unit={}): DexResult {
+        checkpoint()
         require(bytes.size<=128*1024*1024) { "DEX exceeds 128 MiB limit" }
         val file=DexBackedDexFile(Opcodes.getDefault(),bytes)
         val endpoints=linkedMapOf<String,Endpoint>(); val sdks=linkedMapOf<String,SdkFinding>(); val findings=linkedMapOf<String,Finding>()
-        for(ref in file.stringReferences) {
+        for((index,ref) in file.stringReferences.withIndex()) {
+            if(index%1024==0)checkpoint()
             if(endpoints.size<5000) DomainRules.extract(ref.string,source).forEach { endpoints[it.value]=it }
         }
         fun feature(id:String,title:String,points:Int,detail:String) {
             if(findings.size<500 && id !in findings) findings[id]=Finding(id,title,Severity.MEDIUM,points,Evidence(source,detail,EvidenceLevel.STATIC_REFERENCE),"Review this code reference in context. Presence does not prove runtime execution.")
         }
         for(c in file.classes) {
+            checkpoint()
             sdkSignatures.forEach { (sig,sdk) -> if(c.type.startsWith(sig)) sdks.putIfAbsent(sdk.first,SdkFinding(sdk.first,sdk.second,sig,source+":"+c.type)) }
             when(c.superclass) {
                 "Landroid/accessibilityservice/AccessibilityService;" -> feature("dex:accessibility","AccessibilityService implementation",5,c.type)
@@ -80,14 +83,17 @@ object ApkAnalyzer {
                         manifest=zip.getInputStream(entry).use { ManifestParser.parse(readLimited(it,8*1024*1024)) }
                         ManifestParser.findings(checkNotNull(manifest),"${apk.name}:AndroidManifest.xml").forEach { findings[it.id]=it }
                     }
-                    val entries=zip.entries().asSequence().filter { it.name.matches(Regex("classes[0-9]*\\.dex")) }.take(100).toList()
+                    val candidates=zip.entries().asSequence().filter { it.name.matches(Regex("classes[0-9]*\\.dex")) }.take(101).toList()
+                    if(candidates.size>100)limits+="${apk.name}: only the first 100 DEX files are analyzed."
+                    val entries=candidates.take(100)
                     if(entries.isEmpty()) limits += "${apk.name}: no classes*.dex; native code and encrypted/loaded payloads are not analyzed."
                     for(e in entries) {
                         checkpoint()
+                        if(e.name.length>128){limits+="${apk.name}: an excessively long DEX entry name was skipped.";continue}
                         val source="${apk.name}:${e.name}"
                         try {
                             val budget=minOf(128L*1024*1024,Runtime.getRuntime().maxMemory()/4).toInt()
-                            val result=dex(zip.getInputStream(e).use { readLimited(it,budget) },source)
+                            val result=dex(zip.getInputStream(e).use { readLimited(it,budget) },source,checkpoint)
                             result.endpoints.forEach { if(endpoints.size<5000) endpoints[it.value]=it }
                             result.sdks.forEach { sdks[it.name]=it }; result.findings.forEach { findings[it.id]=it }; files+=source
                         } catch(e:Exception) { if(e is java.util.concurrent.CancellationException)throw e;limits+="$source: ${e.javaClass.simpleName}: ${e.message?.take(200)}" }
@@ -96,6 +102,7 @@ object ApkAnalyzer {
             } catch(e:Exception) { if(e is java.util.concurrent.CancellationException)throw e;limits+="${apk.name}: ${e.javaClass.simpleName}: ${e.message?.take(200)}" }
         }
         limits += "Static signatures cannot inspect native code, encrypted strings, reflection targets or downloaded code."
+        if(endpoints.size>=5000)limits+="Endpoint evidence is limited to the first 5000 unique references."
         return StaticResult(manifest,endpoints.values.toList(),sdks.values.toList(),findings.values.toList(),files,limits)
     }
     fun readLimited(input:InputStream,max:Int):ByteArray {

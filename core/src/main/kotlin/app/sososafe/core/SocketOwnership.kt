@@ -5,7 +5,8 @@ import java.net.InetAddress
 object SocketOwnership {
     fun address(value:String):String? = runCatching{
         val ip=value.removePrefix("[").removeSuffix("]").substringBefore('%')
-        require(ip.matches(Regex("[0-9a-fA-F:.]+")) && ('.' in ip || ':' in ip))
+        if(':' in ip)require(ip.matches(Regex("[0-9a-fA-F:.]+")))
+        else require(ip.matches(Regex("\\d{1,3}(?:\\.\\d{1,3}){3}")) && ip.split('.').all{it.toInt() in 0..255})
         InetAddress.getByName(ip).hostAddress
     }.getOrNull()
     fun key(protocol:Int,local:String,localPort:Int,remote:String,remotePort:Int):String? {

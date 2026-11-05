@@ -9,6 +9,11 @@ import java.time.Instant
 
 object ReportWriter {
     val json=Json { prettyPrint=true; encodeDefaults=true; ignoreUnknownKeys=true }
+    fun linkEvidence(apps:List<AppRecord>,connections:List<ConnectionRecord>):List<AppRecord>{
+        val index=hashMapOf<Pair<Int,String>,MutableList<String>>()
+        connections.forEach{c->c.uid?.let{uid->(listOfNotNull(c.domain)+c.dnsQueries).distinct().forEach{host->val ids=index.getOrPut(uid to host){mutableListOf()};if(ids.size<50)ids+=c.id}}}
+        return apps.map{app->if(app.uid<0 || app.imported)app else app.copy(exposures=app.exposures.map{link->link.copy(observedConnectionIds=index[app.uid to link.host].orEmpty())})}
+    }
     fun render(report:AuditReport,format:String):String {
         if(format=="json") return json.encodeToString(report)
         return buildString{text(report,format,this)}
@@ -35,7 +40,7 @@ object ReportWriter {
                 app.analysis.sdks.forEach { appendLine("SDK: ${it.name}; signature=${it.signature}; source=${it.source}") }
                 app.analysis.manifest?.let { appendLine("Manifest: ${json.encodeToString(it)}") }
                 app.findings.forEach { appendLine("Finding: ${it.title}; ${it.severity}; points=${it.points}; evidence=${clean(it.evidence.detail)}; level=${it.evidence.level}; source=${clean(it.evidence.source)}; advice=${it.recommendation}") }
-                app.exposures.forEach { appendLine("Correlation: ${it.permission} -> ${it.dataType} -> ${it.host} -> ${it.provider}; ${it.level}; ${it.explanation}") }
+                app.exposures.forEach { appendLine("Correlation: ${it.permission} -> ${it.dataType} -> ${it.host} -> ${it.provider}; ${it.severity}; ${it.level}; ${it.explanation}; observed metadata references (up to 50)=${it.observedConnectionIds}") }
                 (app.limitations+app.analysis.limitations).forEach { appendLine("Limitation: ${clean(it)}") }
                 app.appOps?.let { appendLine("AppOps: ${clean(it)}") }
             }

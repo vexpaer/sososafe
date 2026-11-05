@@ -5,7 +5,8 @@ adb shell am force-stop com.android.launcher3 || true
 adb shell input keyevent KEYCODE_WAKEUP
 adb shell wm dismiss-keyguard
 adb install -r dist/sososafe.apk
-adb install -r dist/app-debug-androidTest.apk
+adb install -r dist/sososafe-tests.apk
+adb install -r dist/fixture.apk
 adb shell am start -W -n app.sososafe.mobile/.MainActivity > artifacts/launch.txt
 sleep 3
 adb exec-out screencap -p > artifacts/phone-light.png

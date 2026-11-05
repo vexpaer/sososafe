@@ -25,7 +25,7 @@ import kotlinx.serialization.Serializable
     val debuggable: Boolean? = null, val cleartext: Boolean? = null,
     val networkSecurityConfig: String? = null, val components: List<Component> = emptyList()
 )
-@Serializable data class ExposureLink(val dataType: String, val permission: String, val granted: Boolean?, val host: String, val provider: String, val level: EvidenceLevel, val explanation: String)
+@Serializable data class ExposureLink(val dataType: String, val permission: String, val granted: Boolean?, val host: String, val provider: String, val level: EvidenceLevel, val explanation: String,val severity:Severity=Severity.INFO,val observedConnectionIds:List<String> = emptyList())
 @Serializable data class StaticResult(
     val manifest: ManifestResult? = null, val endpoints: List<Endpoint> = emptyList(),
     val sdks: List<SdkFinding> = emptyList(), val findings: List<Finding> = emptyList(),

@@ -54,6 +54,12 @@ class AnalysisTest {
         assertTrue(result.riskScore in 1..100)
         val granted=RiskEngine.evaluate(result.copy(permissions=listOf(p.copy(granted=true))))
         assertTrue(granted.riskScore>result.riskScore)
+        assertEquals(Severity.MEDIUM,granted.exposures.single().severity)
+        val c=ConnectionRecord("observed",0,0,"TCP","10.0.0.1",1000,"1.2.3.4",443,uid=10001,domain="app-measurement.com")
+        val linked=ReportWriter.linkEvidence(listOf(granted.copy(uid=10001),granted.copy(uid=10002)),listOf(c))
+        assertEquals(listOf("observed"),linked[0].exposures.single().observedConnectionIds)
+        assertTrue(linked[1].exposures.single().observedConnectionIds.isEmpty())
+        assertEquals(EvidenceLevel.STATIC_REFERENCE,linked[0].exposures.single().level)
     }
     @Test fun scoresAreCappedAndDeterministic(){
         val findings=(1..1000).map{Finding("manifest:$it","test",Severity.HIGH,10,Evidence("fixture","x",EvidenceLevel.STATIC_REFERENCE),"review")}

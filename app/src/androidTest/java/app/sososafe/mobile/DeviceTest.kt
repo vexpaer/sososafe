@@ -70,7 +70,7 @@ class DeviceTest {
             assertEquals(value,builder.toString())
         }finally{migrated.close();context.deleteDatabase(name)}
     }
-    @Test fun localVpnActuallyForwardsShellTcpAndUdpAndStops()=runBlocking {
+    @Test fun localVpnForwardsAnotherAppTcpUdpDnsAndStops()=runBlocking {
         val activity=ActivityScenario.launch(MainActivity::class.java)
         val device=UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
         val intent=VpnService.prepare(context)
@@ -86,15 +86,21 @@ class DeviceTest {
         try {
             withTimeout(15000){while(!MonitorVpnService.state.value.running){MonitorVpnService.state.value.error?.let{error(it)};delay(100)}}
             delay(1000)
-            // Shell UID is outside sososafe's excluded UID and therefore traverses the TUN.
-            val tcp=shell("echo soso-tcp | toybox nc -w 5 -W 5 10.0.2.2 18080")
-            assertTrue("TCP relay returned: $tcp",tcp.contains("soso-tcp"))
-            val udp=shell("echo soso-udp | toybox nc -u -w 5 -W 3 10.0.2.2 18081")
-            assertTrue("UDP relay returned: $udp",udp.contains("soso-udp"))
+            // A separate application UID must traverse the VPN. Shell/system UIDs may bypass it.
+            val peer=Intent().setComponent(android.content.ComponentName("app.sososafe.fixture","app.sososafe.fixture.TrafficActivity"))
+            activity.onActivity{it.startActivity(peer)}
+            var result=""
+            withTimeout(20000){while(!result.contains("\"done\":true")){delay(300);result=shell("cat /sdcard/Android/data/app.sososafe.fixture/files/result.json")}}
+            val values=org.json.JSONObject(result);assertFalse(result,values.has("error"));assertEquals("soso-tcp",values.getString("tcp"));assertEquals("soso-udp",values.getString("udp"))
             withTimeout(10000){while(app.repo.dao.allConnections().none{ReportWriter.json.decodeFromString<ConnectionRecord>(it.json).remotePort==18080})delay(500)}
             val records=app.repo.dao.allConnections().map{ReportWriter.json.decodeFromString<ConnectionRecord>(it.json)}
             assertTrue(records.any{it.protocol=="TCP" && it.uploaded>0 && it.downloaded>0})
             assertTrue(records.any{it.protocol=="UDP" && it.remotePort==18081})
+            assertTrue(records.any{"sososafe-ci.invalid" in it.dnsQueries})
+            if(android.os.Build.VERSION.SDK_INT>=29){
+                val uid=context.packageManager.getApplicationInfo("app.sososafe.fixture",0).uid
+                assertTrue("No verified peer UID in $records",records.any{it.remotePort==18081 && it.uid==uid})
+            }
         } finally {
             context.startService(Intent(context,MonitorVpnService::class.java).setAction(MonitorVpnService.STOP))
             withTimeout(10000){while(MonitorVpnService.state.value.running)delay(100)}

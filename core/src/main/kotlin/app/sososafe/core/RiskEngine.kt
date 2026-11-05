@@ -8,7 +8,7 @@ object RiskEngine {
         if(trackers.isNotEmpty()) findings+=Finding("network:static-trackers","Known tracking service references",Severity.MEDIUM,minOf(15,trackers.map { it.provider }.distinct().size*3),Evidence("DEX strings + offline domain rules",trackers.joinToString { it.host },EvidenceLevel.STATIC_REFERENCE),"Compare with live connections. A reference does not prove the app contacted it.")
         if(app.sharedUid!=null) findings+=Finding("uid:shared","UID shared with other packages",Severity.LOW,3,Evidence("PackageManager / dumpsys",app.sharedUid,EvidenceLevel.CAPABILITY),"UID-based network attribution applies to every package sharing this UID.")
         val links=app.permissions.asSequence().filter { it.group !in setOf("Other","Notifications","Bluetooth","Nearby Devices","Overlay") }.flatMap { p ->
-            app.analysis.endpoints.asSequence().map { ep -> ExposureLink(p.group,p.name,p.granted,ep.host,ep.provider,EvidenceLevel.STATIC_REFERENCE,"Access capability and a static endpoint coexist. No data transmission or disclosure is proven.") }
+            app.analysis.endpoints.asSequence().map { ep -> ExposureLink(p.group,p.name,p.granted,ep.host,ep.provider,EvidenceLevel.STATIC_REFERENCE,"Access capability and a static endpoint coexist. No data transmission or disclosure is proven.",if(ep.tracker && p.granted==true)Severity.MEDIUM else if(ep.tracker)Severity.LOW else Severity.INFO) }
         }.distinctBy { Triple(it.dataType,it.host,it.permission) }.take(501).toList()
         val unique=findings.distinctBy { it.id }
         // Cap each independent family so a long manifest cannot dominate the score.

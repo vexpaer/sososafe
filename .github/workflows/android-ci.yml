@@ -51,16 +51,20 @@ jobs:
           chmod +x gradlew
           set -o pipefail
           python3 -m unittest discover -s scripts -p 'test_*.py'
-          ./gradlew :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest --continue --stacktrace 2>&1 | tee android-build.log
+          ./gradlew :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest :fixture:assembleDebug --continue --stacktrace 2>&1 | tee android-build.log
       - name: Prepare APK and checksum
         run: |
           mkdir -p dist
           cp app/build/outputs/apk/debug/app-debug.apk dist/sososafe.apk
+          cp app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk dist/sososafe-tests.apk
+          cp fixture/build/outputs/apk/debug/fixture-debug.apk dist/fixture.apk
           cd dist && sha256sum sososafe.apk > sososafe.apk.sha256
       - uses: actions/upload-artifact@v4
         with:
           name: sososafe-debug
-          path: dist/*
+          path: |
+            dist/sososafe.apk
+            dist/sososafe.apk.sha256
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
@@ -70,7 +74,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: sososafe-test-runner
-          path: app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+          path: |
+            dist/sososafe-tests.apk
+            dist/fixture.apk
           if-no-files-found: error
       - name: Upload tests, Lint and build logs
         if: always()

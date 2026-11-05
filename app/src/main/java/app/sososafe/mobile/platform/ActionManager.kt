@@ -13,48 +13,58 @@ import kotlinx.serialization.encodeToString
 import java.io.File
 import java.util.UUID
 
-data class ActionPlan(val id:String,val app:AppRecord,val kind:String,val argument:String,val original:String,val desired:String,val mode:ScanMode,val userId:Int,val effect:String)
+data class ActionPlan(val id:String,val app:AppRecord,val kind:String,val argument:String,val original:String,val desired:String,val mode:ScanMode,val userId:Int,val effect:String,val scope:String="PACKAGE")
 class ActionManager(private val context:Context,private val repo:AuditRepository) {
     private val access=repo.access;private val dao=repo.dao; private val json=ReportWriter.json
     private val protected=setOf("android","com.android.systemui","com.android.settings","com.android.shell","com.android.permissioncontroller","com.google.android.permissioncontroller",context.packageName)
     suspend fun prepare(app:AppRecord,kind:String,argument:String=""):ActionPlan=withContext(Dispatchers.IO) {
         check(!app.imported){"Imported APK has no installed target"};Commands.packageName(app.packageName)
+        val currentInfo=context.packageManager.getPackageInfo(app.packageName,0)
+        val currentApp=checkNotNull(currentInfo.applicationInfo)
+        val target=app.copy(uid=currentApp.uid,version=currentInfo.versionName.orEmpty(),label=context.packageManager.getApplicationLabel(currentApp).toString(),system=currentApp.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM!=0)
         val mode=access.selected(repo.settings.flow.first().mode)
         val user=access.userId
+        var scope="PACKAGE"
         val original:String;val desired:String;val effect:String
         when(kind) {
             "APP_OP" -> {
+                check(target.uid%100000>=10000 && target.packageName !in protected){"Core/system UIDs are protected from AppOps changes. Use Android settings."}
                 check(mode!=ScanMode.STANDARD){"Root or Shizuku authorization required"};require(argument in Commands.allowedOps)
                 val output=access.execute(mode,Commands.op(app.packageName,argument,user)).checked()
-                original=Commands.packageOpMode(output,argument) ?: error("Cannot determine original package AppOp separately from UID overrides. Use Android settings.")
-                desired="ignore";effect="Restrict $argument to ignore. The related feature may stop working. Original mode: $original. UID-wide AppOps can affect packages sharing a UID."
+                val uidMode=Commands.uidOpMode(output,argument)
+                if(uidMode!=null)scope="UID"
+                original=uidMode ?: Commands.packageOpMode(output,argument) ?: error("Cannot determine original AppOp. Use Android settings.")
+                val shared=context.packageManager.getPackagesForUid(target.uid).orEmpty().joinToString()
+                desired="ignore";effect="Restrict $argument to ignore at $scope scope. The related feature may stop working. Original mode: $original. ${if(scope=="UID")"Applies to ALL packages of UID ${target.uid}: $shared"else "Package setting only; UID overrides take precedence."}\n将 $argument 限制为 ignore，相关功能可能失效。范围：$scope。${if(scope=="UID")"将影响此 UID 下的全部应用：$shared"else "仅修改此包；UID 级设置优先。"}"
             }
             "DISABLE" -> {
-                check(mode!=ScanMode.STANDARD){"Root or Shizuku authorization required"};check(app.packageName !in protected && !app.system){"Core and system applications are protected from disabling"}
+                check(mode!=ScanMode.STANDARD){"Root or Shizuku authorization required"};check(app.packageName !in protected && !target.system){"Core and system applications are protected from disabling"}
                 val current=context.packageManager.getApplicationEnabledSetting(app.packageName)
                 original=current.toString();desired="3";effect="Disable this user application for Android user $user. Notifications, background work and launching will stop until restored."
             }
             "UNINSTALL" -> {
-                check(!app.system && app.packageName !in protected){"Only user applications can be uninstalled"}
-                original="installed:${app.version}";desired="uninstalled";effect="The Android uninstall dialog will ask again. Private app data is deleted and cannot be recovered by sososafe. APK files are saved locally for reinstalling this version; reinstalling requires Android approval."
+                check(!target.system && app.packageName !in protected){"Only user applications can be uninstalled"}
+                original="installed:${target.version}";desired="uninstalled";effect="The Android uninstall dialog will ask again. Private app data is deleted and cannot be recovered by sososafe. APK files are saved locally for reinstalling this version; reinstalling requires Android approval."
             }
             else -> error("Unsupported operation")
         }
-        ActionPlan(UUID.randomUUID().toString(),app,kind,argument,original,desired,mode,user,effect)
+        ActionPlan(UUID.randomUUID().toString(),target,kind,argument,original,desired,mode,user,effect,scope)
     }
     suspend fun execute(plan:ActionPlan):ActionRecord=withContext(Dispatchers.IO) {
         check(plan.userId==access.userId)
-        val pending=ActionRecord(plan.id,plan.app.packageName,plan.kind,plan.argument,plan.original,plan.desired,System.currentTimeMillis(),"PENDING",true,mode=plan.mode,userId=plan.userId)
+        check(context.packageManager.getApplicationInfo(plan.app.packageName,0).uid==plan.app.uid){"Target app installation changed; prepare again"}
+        val pending=ActionRecord(plan.id,plan.app.packageName,plan.kind,plan.argument,plan.original,plan.desired,System.currentTimeMillis(),"PENDING",true,mode=plan.mode,userId=plan.userId,scope=plan.scope,targetUid=plan.app.uid)
         save(pending)
         val result=try {
             when(plan.kind) {
                 "APP_OP" -> {
                     val before=access.execute(plan.mode,Commands.op(plan.app.packageName,plan.argument,plan.userId)).checked()
-                    val current=Commands.packageOpMode(before,plan.argument)
+                    val current=if(plan.scope=="UID")Commands.uidOpMode(before,plan.argument)else Commands.packageOpMode(before,plan.argument)
                     check(current==plan.original){"State changed after confirmation; prepare again"}
-                    access.execute(plan.mode,Commands.setOp(plan.app.packageName,plan.argument,plan.desired,plan.userId)).checked()
+                    val command=if(plan.scope=="UID")Commands.setUidOp(plan.app.packageName,plan.argument,plan.desired,plan.userId)else Commands.setOp(plan.app.packageName,plan.argument,plan.desired,plan.userId)
+                    access.execute(plan.mode,command).checked()
                     val after=access.execute(plan.mode,Commands.op(plan.app.packageName,plan.argument,plan.userId)).checked()
-                    check(Commands.packageOpMode(after,plan.argument)==plan.desired){"AppOps did not confirm requested package mode"};"SUCCESS"
+                    check((if(plan.scope=="UID")Commands.uidOpMode(after,plan.argument)else Commands.packageOpMode(after,plan.argument))==plan.desired){"AppOps did not confirm requested mode"};"SUCCESS"
                 }
                 "DISABLE" -> {
                     check(context.packageManager.getApplicationEnabledSetting(plan.app.packageName).toString()==plan.original){"Enabled state changed; prepare again"}
@@ -97,14 +107,16 @@ class ActionManager(private val context:Context,private val repo:AuditRepository
         val result=try {
             when(record.action) {
                 "APP_OP" -> {
+                    check(record.targetUid<0 || context.packageManager.getApplicationInfo(record.packageName,0).uid==record.targetUid){"Target installation UID changed; original settings do not belong to this installation"}
                     val before=access.execute(record.mode,Commands.op(record.packageName,record.argument,record.userId)).checked()
-                    val current=Commands.packageOpMode(before,record.argument)
+                    val current=if(record.scope=="UID")Commands.uidOpMode(before,record.argument)else Commands.packageOpMode(before,record.argument)
                     check(current==record.original || current==record.desired){"AppOp changed after this operation; review current settings before restoring"}
-                    if(current!=record.original)access.execute(record.mode,Commands.setOp(record.packageName,record.argument,record.original,record.userId)).checked()
+                    if(current!=record.original)access.execute(record.mode,if(record.scope=="UID")Commands.setUidOp(record.packageName,record.argument,record.original,record.userId)else Commands.setOp(record.packageName,record.argument,record.original,record.userId)).checked()
                     val after=access.execute(record.mode,Commands.op(record.packageName,record.argument,record.userId)).checked()
-                    check(Commands.packageOpMode(after,record.argument)==record.original){"Restored package mode not confirmed"}
+                    check((if(record.scope=="UID")Commands.uidOpMode(after,record.argument)else Commands.packageOpMode(after,record.argument))==record.original){"Restored mode not confirmed"}
                 }
                 "DISABLE" -> {
+                    check(record.targetUid<0 || context.packageManager.getApplicationInfo(record.packageName,0).uid==record.targetUid){"Target installation UID changed"}
                     val current=context.packageManager.getApplicationEnabledSetting(record.packageName).toString()
                     check(current==record.original || current==record.desired){"Enabled state changed after this operation; review settings first"}
                     if(current!=record.original)access.execute(record.mode,Commands.restoreEnabled(record.packageName,record.original.toInt(),record.userId)).checked()

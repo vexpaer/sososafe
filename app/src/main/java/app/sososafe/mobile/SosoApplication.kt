@@ -13,7 +13,7 @@ class SosoApplication:Application() {
     lateinit var actions:ActionManager;private set
     override fun onCreate(){
         super.onCreate()
-        val db=Room.databaseBuilder(this,AuditDatabase::class.java,"sososafe.db").build()
+        val db=Room.databaseBuilder(this,AuditDatabase::class.java,"sososafe.db").addMigrations(AuditDatabase.MIGRATION_1_2).build()
         repo=AuditRepository(this,db,SettingsStore(this),PrivilegedAccess(this))
         actions=ActionManager(this,repo)
         scope.launch {

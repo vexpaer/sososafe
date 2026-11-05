@@ -57,7 +57,8 @@ import kotlinx.serialization.Serializable
     val id: String, val packageName: String, val action: String, val argument: String = "",
     val original: String, val desired: String, val createdAt: Long,
     val result: String, val reversible: Boolean, val rolledBack: Boolean = false,
-    val mode: ScanMode = ScanMode.STANDARD, val userId: Int = 0
+    val mode: ScanMode = ScanMode.STANDARD, val userId: Int = 0,
+    val scope:String="PACKAGE",val targetUid:Int=-1
 ) {
     val canRollback:Boolean get()=reversible && !rolledBack && (result.startsWith("SUCCESS") || result.startsWith("ROLLBACK_FAILED") || result.startsWith("FAILED") || result=="INTERRUPTED_UNKNOWN")
 }

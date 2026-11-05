@@ -35,6 +35,7 @@ android {
     lint { abortOnError = true; checkReleaseBuilds = true; htmlReport = true; sarifReport = true }
     testOptions { unitTests.isIncludeAndroidResources = true }
     sourceSets.getByName("main").jniLibs.srcDir("src/main/jniLibs")
+    sourceSets.getByName("androidTest").assets.srcDir("schemas")
 }
 ksp { arg("room.schemaLocation", "$projectDir/schemas") }
 dependencies {

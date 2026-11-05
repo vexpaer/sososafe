@@ -10,6 +10,11 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
 class AnalysisTest {
+    @Test fun jsonChunksPreserveUnicodeAndLargeReports(){
+        val value="abc😀中文".repeat(100000)
+        val chunks=JsonChunks.split(value,32768)
+        assertEquals(value,chunks.joinToString(""));assertTrue(chunks.all{it.length<=32768 && !it.last().isHighSurrogate()})
+    }
     @Test fun permissionStatesRemainDistinct(){
         assertNull(PermissionRules.granted(null));assertFalse(PermissionRules.granted(0)!!);assertTrue(PermissionRules.granted(2)!!)
         assertEquals("Location",PermissionRules.group("android.permission.ACCESS_FINE_LOCATION"))
@@ -76,6 +81,8 @@ class AnalysisTest {
         assertEquals("allow",Commands.packageOpMode("Uid mode: CAMERA: ignore\nCAMERA: allow; time=0","CAMERA"))
         assertNull(Commands.packageOpMode("Uid mode: CAMERA: ignore","CAMERA"))
         assertEquals("allow",Commands.packageOpMode("No operations.\nDefault mode: allow\n","CAMERA"))
+        assertEquals("ignore",Commands.uidOpMode("Uid mode: CAMERA: ignore\nCAMERA: allow","CAMERA"))
+        assertTrue(Commands.valid(Commands.setUidOp("test.audit","CAMERA","foreground",0)))
     }
     @Test fun reportsContainEvidenceAndRoundTripJson(){
         val r=AuditReport(generatedAt=0,device=mapOf("model" to "fixture"),mode=ScanMode.STANDARD,apps=listOf(AppRecord("test.audit","A\"B")),scans=emptyList(),connections=emptyList(),actions=emptyList())

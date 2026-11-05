@@ -18,6 +18,12 @@ import org.junit.*
 import org.junit.Assert.*
 import org.junit.runner.RunWith
 import java.io.File
+import androidx.room.Room
+import androidx.sqlite.db.SupportSQLiteDatabase
+import androidx.sqlite.db.SupportSQLiteOpenHelper
+import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
+import app.sososafe.mobile.data.AuditDatabase
+import kotlinx.serialization.encodeToString
 
 @RunWith(AndroidJUnit4::class)
 class DeviceTest {
@@ -45,6 +51,23 @@ class DeviceTest {
         assertTrue(denied.code!=0)
         val result=ReportWriter.json.decodeFromString<ShellResult>(service.execute(arrayOf("id")))
         assertEquals(0,result.code);assertTrue(result.output.contains("uid="))
+    }
+    @Test fun largeReportMigrationPreservesUnicodeWithoutLargeCursorRows(){
+        val name="migration-fixture.db";context.deleteDatabase(name)
+        val schema=org.json.JSONObject(InstrumentationRegistry.getInstrumentation().context.assets.open("app.sososafe.mobile.data.AuditDatabase/1.json").bufferedReader().use{it.readText()}).getJSONObject("database").getJSONArray("entities")
+        val factory=FrameworkSQLiteOpenHelperFactory()
+        val helper=factory.create(SupportSQLiteOpenHelper.Configuration.builder(context).name(name).callback(object:SupportSQLiteOpenHelper.Callback(1){
+            override fun onCreate(db:SupportSQLiteDatabase){for(i in 0 until schema.length()){val table=schema.getJSONObject(i);db.execSQL(table.getString("createSql").replace("\${TABLE_NAME}",table.getString("tableName")))}}
+            override fun onUpgrade(db:SupportSQLiteDatabase,oldVersion:Int,newVersion:Int){error("Unexpected upgrade")}
+        }).build())
+        val value=ReportWriter.json.encodeToString(AppRecord("fixture.large","Unicode 😀",analysis=StaticResult(limitations=listOf("中文😀".repeat(300000)))))
+        helper.writableDatabase.execSQL("INSERT INTO applications(packageName,risk,updated,json) VALUES(?,?,?,?)",arrayOf("fixture.large",0,1,value));helper.close()
+        val migrated=Room.databaseBuilder(context,AuditDatabase::class.java,name).addMigrations(AuditDatabase.MIGRATION_1_2).build()
+        try {
+            val builder=StringBuilder()
+            migrated.openHelper.writableDatabase.query("SELECT json FROM application_chunks ORDER BY sequence").use{cursor->while(cursor.moveToNext()){val chunk=cursor.getString(0);assertTrue(chunk.codePointCount(0,chunk.length)<=32768);builder.append(chunk)}}
+            assertEquals(value,builder.toString())
+        }finally{migrated.close();context.deleteDatabase(name)}
     }
     @Test fun localVpnActuallyForwardsShellTcpAndUdpAndStops()=runBlocking {
         val device=UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())

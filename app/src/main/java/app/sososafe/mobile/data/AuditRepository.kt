@@ -15,7 +15,14 @@ import java.util.UUID
 data class ScanProgress(val status:String="IDLE",val done:Int=0,val total:Int=0,val current:String="",val error:String?=null)
 class AuditRepository(private val context:Context,val db:AuditDatabase,val settings:SettingsStore,val access:PrivilegedAccess) {
     val dao=db.dao(); private val json=ReportWriter.json
-    val apps=dao.apps().map { rows -> rows.map { json.decodeFromString<AppRecord>(it.json) } }
+    private val appCache=java.util.concurrent.ConcurrentHashMap<String,Pair<Long,AppRecord>>()
+    private suspend fun hydrate(row:AppEntity):AppRecord {
+        appCache[row.packageName]?.takeIf{it.first==row.updated}?.let{return it.second}
+        val parts=dao.chunks(row.packageName)
+        val record=json.decodeFromString<AppRecord>(if(parts.isEmpty())row.json else parts.joinToString(""){it.json})
+        appCache[row.packageName]=row.updated to record;return record
+    }
+    val apps=dao.apps().map { rows -> withContext(Dispatchers.IO){appCache.keys.retainAll(rows.map{it.packageName}.toSet());rows.map{hydrate(it)}} }
     val scans=dao.scans().map { rows -> rows.map { json.decodeFromString<ScanRecord>(it.json) } }
     val connections=dao.connections().map { rows -> rows.map { json.decodeFromString<ConnectionRecord>(it.json) } }
     val actions=dao.actions().map { rows -> rows.map { json.decodeFromString<ActionRecord>(it.json) } }
@@ -23,7 +30,11 @@ class AuditRepository(private val context:Context,val db:AuditDatabase,val setti
     private var scanJob:Job?=null
     suspend fun save(record:AppRecord) {
         db.withTransaction {
-            dao.app(AppEntity(record.packageName,record.riskScore,record.scannedAt,json.encodeToString(record)))
+            val encoded=json.encodeToString(record)
+            dao.clearChunks(record.packageName)
+            dao.chunks(JsonChunks.split(encoded).mapIndexed{i,part->AppChunkEntity(record.packageName,i,part)})
+            dao.app(AppEntity(record.packageName,record.riskScore,record.scannedAt,"{}"))
+            appCache[record.packageName]=record.scannedAt to record
             dao.clearPermissions(record.packageName);dao.clearEndpoints(record.packageName);dao.clearFindings(record.packageName)
             dao.permissions(record.permissions.map { PermissionEntity(record.packageName,it.name,json.encodeToString(it)) })
             dao.endpoints(record.analysis.endpoints.map { EndpointEntity(record.packageName,it.value,json.encodeToString(it)) })
@@ -80,13 +91,13 @@ class AuditRepository(private val context:Context,val db:AuditDatabase,val setti
     }
     suspend fun export(format:String):File=withContext(Dispatchers.IO) {
         val savedScans=dao.allScans().map { json.decodeFromString<ScanRecord>(it.json) }
-        val report=AuditReport(generatedAt=System.currentTimeMillis(),device=mapOf("manufacturer" to Build.MANUFACTURER,"model" to Build.MODEL,"android" to Build.VERSION.RELEASE,"api" to Build.VERSION.SDK_INT.toString(),"securityPatch" to Build.VERSION.SECURITY_PATCH),mode=savedScans.firstOrNull()?.mode ?: ScanMode.STANDARD,apps=dao.allApps().map { json.decodeFromString(it.json) },scans=savedScans,connections=dao.allConnections().map { json.decodeFromString(it.json) },actions=dao.allActions().map { json.decodeFromString(it.json) })
+        val report=AuditReport(generatedAt=System.currentTimeMillis(),device=mapOf("manufacturer" to Build.MANUFACTURER,"model" to Build.MODEL,"android" to Build.VERSION.RELEASE,"api" to Build.VERSION.SDK_INT.toString(),"securityPatch" to Build.VERSION.SECURITY_PATCH),mode=savedScans.firstOrNull()?.mode ?: ScanMode.STANDARD,apps=dao.allApps().map { hydrate(it) },scans=savedScans,connections=dao.allConnections().map { json.decodeFromString(it.json) },actions=dao.allActions().map { json.decodeFromString(it.json) })
         val dir=File(context.filesDir,"reports").apply{mkdirs()}
         File(dir,"sososafe-${System.currentTimeMillis()}.$format").apply { writeText(ReportWriter.render(report,format)) }
     }
     suspend fun clearAudit()=withContext(Dispatchers.IO){
         check(scanJob?.isActive!=true){"Cancel the scan first"}
-        db.withTransaction {dao.clearApps();dao.clearPermissions();dao.clearEndpoints();dao.clearFindings();dao.clearScans();dao.clearConnections()}
+        db.withTransaction {dao.clearApps();dao.clearChunks();dao.clearPermissions();dao.clearEndpoints();dao.clearFindings();dao.clearScans();dao.clearConnections()};appCache.clear()
         File(context.filesDir,"reports").listFiles()?.forEach{it.delete()}
     }
 }

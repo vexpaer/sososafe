@@ -66,6 +66,11 @@ jobs:
           name: sososafe-native
           path: app/src/main/jniLibs/
           if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sososafe-test-runner
+          path: app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+          if-no-files-found: error
       - name: Upload tests, Lint and build logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -103,6 +108,10 @@ jobs:
         with:
           name: sososafe-native
           path: app/src/main/jniLibs
+      - uses: actions/download-artifact@v4
+        with:
+          name: sososafe-test-runner
+          path: dist
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules

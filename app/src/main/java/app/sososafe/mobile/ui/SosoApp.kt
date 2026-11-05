@@ -37,6 +37,7 @@ import app.sososafe.core.*
 import app.sososafe.mobile.AuditViewModel
 import app.sososafe.mobile.platform.vpn.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.DateFormat
@@ -107,7 +108,7 @@ private fun bytes(value:Long):String=when {value>=1024L*1024*1024->"%.2f GiB".fo
     }
 }
 
-private fun kotlinx.coroutines.CoroutineScope.launchSafe(vm:AuditViewModel,block:suspend ()->Unit){kotlinx.coroutines.launch {try{block()}catch(e:Exception){vm.message.value=e.message}}}
+private fun kotlinx.coroutines.CoroutineScope.launchSafe(vm:AuditViewModel,block:suspend ()->Unit){launch {try{block()}catch(e:Exception){vm.message.value=e.message}}}
 private fun openSettings(context:android.content.Context,pkg:String){context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:$pkg")))}
 
 @Composable private fun Section(title:String,subtitle:String?=null){Column(Modifier.fillMaxWidth().padding(top=20.dp,bottom=8.dp)){Text(title,style=MaterialTheme.typography.titleLarge);if(subtitle!=null)Text(subtitle,style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)}}

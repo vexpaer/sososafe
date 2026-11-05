@@ -16,7 +16,9 @@ import java.util.UUID
 
 data class MonitorState(val running:Boolean=false,val status:String="STOPPED",val error:String?=null,val unrecorded:Long=0)
 class MonitorVpnService:VpnService() {
-    companion object {val state=MutableStateFlow(MonitorState());const val STOP="app.sososafe.STOP_VPN"}
+    companion object {val state=MutableStateFlow(MonitorState());const val STOP="app.sososafe.STOP_VPN";private val sessions=java.util.concurrent.atomic.AtomicLong();@Volatile private var currentSession=0L}
+    private val session=sessions.incrementAndGet()
+    @Volatile private var monitoring=false
     private val scope=CoroutineScope(SupervisorJob()+Dispatchers.IO)
     private var tun:ParcelFileDescriptor?=null;private var proxy:LocalSocksProxy?=null;private var nativeJob:Job?=null;private var recorder:TrafficRecorder?=null
     private val cm by lazy {getSystemService(ConnectivityManager::class.java)}
@@ -51,8 +53,9 @@ class MonitorVpnService:VpnService() {
             val user=UUID.randomUUID().toString();val pass=UUID.randomUUID().toString()
             fun tcp(s:Socket){check(protect(s)){"Cannot protect relay socket"};underlying?.bindSocket(s)}
             fun udp(s:DatagramSocket){check(protect(s)){"Cannot protect UDP relay"};underlying?.bindSocket(s)}
-            fun route(address:java.net.InetAddress):java.net.InetAddress {
-                val resolved=if(address.hostAddress=="10.82.0.2")dnsServers.firstOrNull() ?: error("Current network has no DNS resolver")else address
+            fun route(address:java.net.InetAddress,port:Int):java.net.InetAddress {
+                val alias=when(address.hostAddress){"10.82.0.2"->0;"10.82.0.3"->1;else->null}
+                val resolved=if(port==53 && alias!=null)dnsServers.getOrNull(alias) ?: dnsServers.firstOrNull() ?: error("Current network has no DNS resolver")else address
                 return if(resolved is java.net.Inet6Address && resolved.isLinkLocalAddress && resolved.scopeId==0){
                     java.net.Inet6Address.getByAddress(null,resolved.address,java.net.NetworkInterface.getByName(checkNotNull(networkInterface)))
                 }else resolved
@@ -62,6 +65,7 @@ class MonitorVpnService:VpnService() {
             check(dnsServers.isNotEmpty()){ "No network DNS resolver available. Connect to Wi-Fi or mobile data and retry." }
             // A virtual DNS destination follows the current physical resolver after network changes.
             builder.addDnsServer("10.82.0.2")
+            builder.addDnsServer("10.82.0.3")
             tun=checkNotNull(builder.establish()){"Android VPN consent is missing or another VPN conflicts"}
             setUnderlyingNetworks(underlying?.let{arrayOf(it)})
             val app=application as SosoApplication
@@ -84,15 +88,16 @@ class MonitorVpnService:VpnService() {
                   log-level: error
                   log-file: /dev/null
             """.trimIndent())}
-            state.value=MonitorState(true,"ACTIVE")
+            currentSession=session;monitoring=true;state.value=MonitorState(true,"ACTIVE")
             val nativeDescriptor=ParcelFileDescriptor.dup(checkNotNull(tun).fileDescriptor)
             val nativeRecorder=checkNotNull(recorder)
+            scope.launch {while(isActive && monitoring){nativeRecorder.recordDropped(NativeTunnel.drain(nativeRecorder,session));delay(20)}}
             nativeJob=scope.launch{
                 try {
-                    val result=NativeTunnel.run(config.absolutePath,nativeDescriptor.fd,nativeRecorder)
-                    if(state.value.running)state.value=MonitorState(false,"ERROR","Native tunnel exited ($result)")
-                }catch(e:Throwable){state.value=MonitorState(false,"ERROR",e.message)}
-                finally{withContext(NonCancellable){runCatching{nativeRecorder.flush()}};nativeDescriptor.close();config.delete();stopMonitor()}
+                    val result=NativeTunnel.run(config.absolutePath,nativeDescriptor.fd,session)
+                    if(monitoring && currentSession==session)state.value=MonitorState(false,"ERROR","Native tunnel exited ($result)")
+                }catch(e:Throwable){if(currentSession==session)state.value=MonitorState(false,"ERROR",e.message)}
+                finally{monitoring=false;nativeRecorder.recordDropped(NativeTunnel.drain(nativeRecorder,session));withContext(NonCancellable){runCatching{nativeRecorder.flush()}};nativeDescriptor.close();config.delete();stopMonitor()}
             }
             nativeJob?.invokeOnCompletion{nativeDescriptor.close();config.delete()}
             scope.launch {while(isActive && state.value.running){delay(2000);state.value=state.value.copy(unrecorded=recorder?.dropped ?: 0)}}
@@ -100,8 +105,8 @@ class MonitorVpnService:VpnService() {
         return START_NOT_STICKY
     }
     @Synchronized private fun stopMonitor() {
-        val wasRunning=state.value.running
-        state.value=state.value.copy(running=false,status=if(state.value.error!=null)"ERROR" else "STOPPED")
+        val wasRunning=monitoring;monitoring=false
+        if(currentSession==session)state.value=state.value.copy(running=false,status=if(state.value.error!=null)"ERROR" else "STOPPED")
         if(wasRunning)runCatching{NativeTunnel.stop()}
         proxy?.close();proxy=null
         runCatching{tun?.close()};tun=null

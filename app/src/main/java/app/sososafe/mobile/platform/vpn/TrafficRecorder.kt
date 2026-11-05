@@ -29,6 +29,7 @@ class TrafficRecorder(private val context:Context,private val repo:AuditReposito
     private val cm=context.getSystemService(ConnectivityManager::class.java)
     private val missed=AtomicLong()
     val dropped:Long get()=missed.get()
+    fun recordDropped(count:Long){if(count>0)missed.addAndGet(count)}
     @Volatile private var shellOwners:Pair<Long,Map<String,Int>> = 0L to emptyMap()
     init {
         scope.launch(Dispatchers.IO){while(isActive){delay(1500);runCatching{flush()}.onFailure{missed.incrementAndGet()}}}

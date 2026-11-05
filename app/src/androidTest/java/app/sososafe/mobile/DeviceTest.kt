@@ -75,7 +75,7 @@ class DeviceTest {
         val device=UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
         val intent=VpnService.prepare(context)
         if(intent!=null){
-            context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            activity.onActivity{host->@Suppress("DEPRECATION") host.startActivityForResult(intent,901)}
             assertTrue("VPN confirmation dialog did not appear",device.wait(Until.hasObject(By.res("android","button1")),10000))
             device.takeScreenshot(File(context.getExternalFilesDir(null),"vpn-consent.png"))
             device.dumpWindowHierarchy(File(context.getExternalFilesDir(null),"vpn-consent.xml"))

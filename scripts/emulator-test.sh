@@ -18,6 +18,9 @@ adb shell wm density reset
 adb shell settings put system font_scale 1.0
 adb shell cmd uimode night no
 chmod +x gradlew
+python3 scripts/relay-fixture.py > artifacts/relay-fixture.log 2>&1 &
+FIXTURE_PID=$!
+trap 'kill "$FIXTURE_PID" 2>/dev/null || true' EXIT
 ./gradlew :app:connectedDebugAndroidTest --stacktrace
 adb logcat -d -s AndroidRuntime:E > artifacts/crashes.txt
 if grep -q 'FATAL EXCEPTION' artifacts/crashes.txt; then cat artifacts/crashes.txt; exit 1; fi

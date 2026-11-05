@@ -6,7 +6,7 @@ object Commands {
     val modes=setOf("allow","ignore","deny","default","foreground")
     fun packageName(value:String):String { require(value.length<=255 && pkg.matches(value)) { "Invalid package name" }; return value }
     fun user(value:Int):String { require(value in 0..99999); return value.toString() }
-    fun list(user:Int)=listOf("pm","list","packages","-U","-u","--user",user(user))
+    fun list(user:Int)=listOf("pm","list","packages","-U","--user",user(user))
     fun paths(p:String,user:Int)=listOf("pm","path","--user",user(user),packageName(p))
     fun dump(p:String)=listOf("dumpsys","package",packageName(p))
     fun ops(p:String,user:Int)=listOf("cmd","appops","get","--user",user(user),packageName(p))
@@ -18,7 +18,7 @@ object Commands {
     fun valid(tokens:List<String>):Boolean = runCatching {
         require(tokens.size<=10 && tokens.all { it.length<=300 && it.none { c -> c=='\u0000' || c=='\n' || c=='\r' } })
         tokens==listOf("id") || tokens==listOf("ss","-tunap") || tokens==listOf("ss","-tunape") || tokens==listOf("dumpsys","connectivity") ||
-            (tokens.size==7 && tokens.take(5)==listOf("pm","list","packages","-U","-u") && tokens[5]=="--user" && tokens[6].toInt() in 0..99999) ||
+            (tokens.size==6 && tokens.take(4)==listOf("pm","list","packages","-U") && tokens[4]=="--user" && tokens[5].toInt() in 0..99999) ||
             (tokens.size==5 && tokens.take(3)==listOf("pm","path","--user") && tokens[3].toInt() in 0..99999 && packageName(tokens[4]).isNotEmpty()) ||
             (tokens.size==3 && tokens.take(2)==listOf("dumpsys","package") && packageName(tokens[2]).isNotEmpty()) ||
             (tokens.size==6 && tokens.take(4)==listOf("cmd","appops","get","--user") && tokens[4].toInt() in 0..99999 && packageName(tokens[5]).isNotEmpty()) ||

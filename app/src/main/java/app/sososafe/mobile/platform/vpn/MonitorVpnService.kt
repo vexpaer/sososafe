@@ -19,6 +19,7 @@ class MonitorVpnService:VpnService() {
     companion object {val state=MutableStateFlow(MonitorState());const val STOP="app.sososafe.STOP_VPN";private val sessions=java.util.concurrent.atomic.AtomicLong();@Volatile private var currentSession=0L}
     private val session=sessions.incrementAndGet()
     @Volatile private var monitoring=false
+    @Volatile private var disposed=false
     private val scope=CoroutineScope(SupervisorJob()+Dispatchers.IO)
     private var tun:ParcelFileDescriptor?=null;private var proxy:LocalSocksProxy?=null;private var nativeJob:Job?=null;private var recorder:TrafficRecorder?=null
     private val cm by lazy {getSystemService(ConnectivityManager::class.java)}
@@ -27,17 +28,20 @@ class MonitorVpnService:VpnService() {
     @Volatile private var networkInterface:String?=null
     private val callback=object:ConnectivityManager.NetworkCallback(){
         override fun onAvailable(network:Network){
+            if(disposed)return
             if(underlying!=network){underlying=network;dnsServers=emptyList();networkInterface=null;proxy?.resetUpstreams()}
-            setUnderlyingNetworks(arrayOf(network));if(state.value.running)state.value=state.value.copy(status="ACTIVE · network changed; apps may reconnect")
+            setUnderlyingNetworks(arrayOf(network));if(monitoring && currentSession==session)state.value=state.value.copy(status="UPDATING_NETWORK · apps may reconnect")
         }
         override fun onLinkPropertiesChanged(network:Network,properties:LinkProperties){
-            if(underlying==network){val next=properties.dnsServers.filter{!it.isAnyLocalAddress&&!it.isLoopbackAddress};if(next!=dnsServers){dnsServers=next;proxy?.resetUpstreams()};networkInterface=properties.interfaceName}
+            if(disposed)return
+            if(underlying==network){val next=properties.dnsServers.filter{!it.isAnyLocalAddress&&!it.isLoopbackAddress};networkInterface=properties.interfaceName;if(next!=dnsServers){dnsServers=next;proxy?.resetUpstreams()};if(monitoring && currentSession==session)state.value=state.value.copy(status=if(next.isEmpty())"WAITING_FOR_DNS"else "ACTIVE")}
         }
-        override fun onLost(network:Network){if(underlying==network){underlying=null;dnsServers=emptyList();networkInterface=null;proxy?.resetUpstreams();setUnderlyingNetworks(null);state.value=state.value.copy(status="WAITING_FOR_NETWORK · apps may reconnect")}}
+        override fun onLost(network:Network){if(!disposed && underlying==network){underlying=null;dnsServers=emptyList();networkInterface=null;proxy?.resetUpstreams();setUnderlyingNetworks(null);if(currentSession==session)state.value=state.value.copy(status="WAITING_FOR_NETWORK · apps may reconnect")}}
     }
     override fun onStartCommand(intent:Intent?,flags:Int,startId:Int):Int {
         if(intent?.action==STOP){stopMonitor();return START_NOT_STICKY}
         if(tun!=null)return START_NOT_STICKY
+        disposed=false
         try {
             if(android.os.Build.VERSION.SDK_INT>=37)check(checkSelfPermission("android.permission.ACCESS_LOCAL_NETWORK")==android.content.pm.PackageManager.PERMISSION_GRANTED){"Local network permission is required. Restart monitoring from the app."}
             val manager=getSystemService(NotificationManager::class.java)
@@ -46,10 +50,10 @@ class MonitorVpnService:VpnService() {
             val open=PendingIntent.getActivity(this,1,Intent(this,MainActivity::class.java),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
             val n=NotificationCompat.Builder(this,"monitor").setSmallIcon(R.drawable.ic_shield).setContentTitle(getString(R.string.monitor_title)).setContentText(getString(R.string.monitor_body)).setContentIntent(open).setOngoing(true).addAction(0,getString(R.string.stop),stop).build()
             startForeground(17,n)
-            underlying=cm.allNetworks.firstOrNull{cm.getNetworkCapabilities(it)?.let{c->c.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)&&c.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)}==true}
+            underlying=cm.activeNetwork?.takeIf{cm.getNetworkCapabilities(it)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)==true} ?: cm.allNetworks.firstOrNull{cm.getNetworkCapabilities(it)?.let{c->c.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)&&c.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)}==true}
             underlying?.let{cm.getLinkProperties(it)}?.let{dnsServers=it.dnsServers.filter{a->!a.isAnyLocalAddress&&!a.isLoopbackAddress};networkInterface=it.interfaceName}
-            val request=NetworkRequest.Builder().addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN).build()
-            if(android.os.Build.VERSION.SDK_INT>=31)cm.registerBestMatchingNetworkCallback(request,callback,android.os.Handler(mainLooper))else cm.registerNetworkCallback(request,callback)
+            // This app is excluded from its own VPN, so its default is the physical network.
+            cm.registerDefaultNetworkCallback(callback,android.os.Handler(mainLooper))
             val user=UUID.randomUUID().toString();val pass=UUID.randomUUID().toString()
             fun tcp(s:Socket){check(protect(s)){"Cannot protect relay socket"};underlying?.bindSocket(s)}
             fun udp(s:DatagramSocket){check(protect(s)){"Cannot protect UDP relay"};underlying?.bindSocket(s)}
@@ -91,21 +95,21 @@ class MonitorVpnService:VpnService() {
             currentSession=session;monitoring=true;state.value=MonitorState(true,"ACTIVE")
             val nativeDescriptor=ParcelFileDescriptor.dup(checkNotNull(tun).fileDescriptor)
             val nativeRecorder=checkNotNull(recorder)
-            scope.launch {while(isActive && monitoring){nativeRecorder.recordDropped(NativeTunnel.drain(nativeRecorder,session));delay(20)}}
+            scope.launch {try{while(isActive && monitoring){nativeRecorder.recordDropped(NativeTunnel.drain(nativeRecorder,session));delay(20)}}catch(e:Throwable){if(currentSession==session)state.value=MonitorState(false,"ERROR",e.message);stopMonitor()}}
             nativeJob=scope.launch{
                 try {
                     val result=NativeTunnel.run(config.absolutePath,nativeDescriptor.fd,session)
                     if(monitoring && currentSession==session)state.value=MonitorState(false,"ERROR","Native tunnel exited ($result)")
                 }catch(e:Throwable){if(currentSession==session)state.value=MonitorState(false,"ERROR",e.message)}
-                finally{monitoring=false;nativeRecorder.recordDropped(NativeTunnel.drain(nativeRecorder,session));withContext(NonCancellable){runCatching{nativeRecorder.flush()}};nativeDescriptor.close();config.delete();stopMonitor()}
+                finally{monitoring=false;runCatching{nativeRecorder.recordDropped(NativeTunnel.drain(nativeRecorder,session))};withContext(NonCancellable){runCatching{nativeRecorder.flush()}};if(currentSession==session)state.value=state.value.copy(unrecorded=nativeRecorder.dropped);nativeDescriptor.close();config.delete();stopMonitor()}
             }
             nativeJob?.invokeOnCompletion{nativeDescriptor.close();config.delete()}
-            scope.launch {while(isActive && state.value.running){delay(2000);state.value=state.value.copy(unrecorded=recorder?.dropped ?: 0)}}
+            scope.launch {while(isActive && monitoring){delay(2000);if(monitoring && currentSession==session)state.value=state.value.copy(unrecorded=recorder?.dropped ?: 0)}}
         }catch(e:Exception){state.value=MonitorState(false,"ERROR",e.message);stopMonitor()}
         return START_NOT_STICKY
     }
     @Synchronized private fun stopMonitor() {
-        val wasRunning=monitoring;monitoring=false
+        val wasRunning=monitoring;monitoring=false;disposed=true
         if(currentSession==session)state.value=state.value.copy(running=false,status=if(state.value.error!=null)"ERROR" else "STOPPED")
         if(wasRunning)runCatching{NativeTunnel.stop()}
         proxy?.close();proxy=null

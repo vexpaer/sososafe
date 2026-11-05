@@ -87,7 +87,7 @@ class AnalysisTest {
     @Test fun reportsContainEvidenceAndRoundTripJson(){
         val r=AuditReport(generatedAt=0,device=mapOf("model" to "fixture"),mode=ScanMode.STANDARD,apps=listOf(AppRecord("test.audit","A\"B")),scans=emptyList(),connections=emptyList(),actions=emptyList())
         val json=ReportWriter.render(r,"json");assertEquals(r,ReportWriter.json.decodeFromString<AuditReport>(json))
-        listOf("md","txt").forEach{val text=ReportWriter.render(r,it);assertTrue(text.contains("test.audit"));assertTrue(text.contains("do not prove"))}
+        listOf("json","md","txt").forEach{val text=ReportWriter.render(r,it);assertTrue(text.contains("test.audit"));assertTrue(text.contains("do not prove"));val stream=ByteArrayOutputStream();ReportWriter.write(r,it,stream);assertEquals(text,stream.toString("UTF-8"))}
     }
     private fun dexWithString(value:String):ByteArray {
         val str=value.toByteArray();val data=byteArrayOf(str.size.toByte())+str+byteArrayOf(0)

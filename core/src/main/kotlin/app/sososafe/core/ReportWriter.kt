@@ -2,15 +2,26 @@ package app.sososafe.core
 
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.encodeToStream
+import kotlinx.serialization.ExperimentalSerializationApi
+import java.io.OutputStream
 import java.time.Instant
 
 object ReportWriter {
     val json=Json { prettyPrint=true; encodeDefaults=true; ignoreUnknownKeys=true }
     fun render(report:AuditReport,format:String):String {
         if(format=="json") return json.encodeToString(report)
+        return buildString{text(report,format,this)}
+    }
+    @OptIn(ExperimentalSerializationApi::class)
+    fun write(report:AuditReport,format:String,output:OutputStream){
+        if(format=="json")json.encodeToStream(report,output)
+        else output.bufferedWriter(Charsets.UTF_8).use{text(report,format,it)}
+    }
+    private fun text(report:AuditReport,format:String,output:Appendable){
         require(format in setOf("md","txt"))
         fun clean(value:String)=value.replace("\r"," ").replace("\n"," ").replace("`","'").replace("#","\\#").replace("<","&lt;")
-        return buildString {
+        with(output) {
             appendLine(if(format=="md") "# sososafe audit" else "sososafe audit")
             appendLine("Generated: ${Instant.ofEpochMilli(report.generatedAt)} | Mode: ${report.mode}")
             report.device.forEach { (k,v) -> appendLine("$k: ${clean(v)}") }

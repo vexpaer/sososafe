@@ -23,7 +23,13 @@ adb shell settings put system font_scale 1.0
 adb shell cmd uimode night no
 python3 scripts/relay-fixture.py > artifacts/relay-fixture.log 2>&1 &
 FIXTURE_PID=$!
-trap 'kill "$FIXTURE_PID" 2>/dev/null || true' EXIT
+cleanup() {
+    adb logcat -d > artifacts/device-logcat.txt || true
+    adb pull /sdcard/Android/data/app.sososafe.mobile/files artifacts/device-files >/dev/null 2>&1 || true
+    adb exec-out screencap -p > artifacts/final-screen.png || true
+    kill "$FIXTURE_PID" 2>/dev/null || true
+}
+trap cleanup EXIT
 adb shell am instrument -w -r -e class app.sososafe.mobile.DeviceTest app.sososafe.mobile.test/androidx.test.runner.AndroidJUnitRunner | tee artifacts/instrumentation.txt
 python3 scripts/verify-instrumentation.py artifacts/instrumentation.txt artifacts/device-tests.xml
 adb logcat -d -s AndroidRuntime:E > artifacts/crashes.txt

@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.net.VpnService
 import androidx.test.core.app.ApplicationProvider
+import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
@@ -70,18 +71,25 @@ class DeviceTest {
         }finally{migrated.close();context.deleteDatabase(name)}
     }
     @Test fun localVpnActuallyForwardsShellTcpAndUdpAndStops()=runBlocking {
+        val activity=ActivityScenario.launch(MainActivity::class.java)
         val device=UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
         val intent=VpnService.prepare(context)
-        if(intent!=null){context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));device.wait(Until.hasObject(By.res("android","button1")),10000);device.findObject(By.res("android","button1"))?.click()}
+        if(intent!=null){
+            context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            assertTrue("VPN confirmation dialog did not appear",device.wait(Until.hasObject(By.res("android","button1")),10000))
+            device.takeScreenshot(File(context.getExternalFilesDir(null),"vpn-consent.png"))
+            device.dumpWindowHierarchy(File(context.getExternalFilesDir(null),"vpn-consent.xml"))
+            device.findObject(By.res("android","button1"))?.click()
+        }
         withTimeout(15000){while(VpnService.prepare(context)!=null)delay(100)}
         context.startForegroundService(Intent(context,MonitorVpnService::class.java))
         try {
             withTimeout(15000){while(!MonitorVpnService.state.value.running){MonitorVpnService.state.value.error?.let{error(it)};delay(100)}}
             delay(1000)
             // Shell UID is outside sososafe's excluded UID and therefore traverses the TUN.
-            val tcp=shell("echo soso-tcp | toybox nc -w 5 10.0.2.2 18080")
+            val tcp=shell("echo soso-tcp | toybox nc -w 5 -W 5 10.0.2.2 18080")
             assertTrue("TCP relay returned: $tcp",tcp.contains("soso-tcp"))
-            val udp=shell("echo soso-udp | toybox nc -u -w 3 10.0.2.2 18081")
+            val udp=shell("echo soso-udp | toybox nc -u -w 5 -W 3 10.0.2.2 18081")
             assertTrue("UDP relay returned: $udp",udp.contains("soso-udp"))
             withTimeout(10000){while(app.repo.dao.allConnections().none{ReportWriter.json.decodeFromString<ConnectionRecord>(it.json).remotePort==18080})delay(500)}
             val records=app.repo.dao.allConnections().map{ReportWriter.json.decodeFromString<ConnectionRecord>(it.json)}
@@ -90,6 +98,7 @@ class DeviceTest {
         } finally {
             context.startService(Intent(context,MonitorVpnService::class.java).setAction(MonitorVpnService.STOP))
             withTimeout(10000){while(MonitorVpnService.state.value.running)delay(100)}
+            activity.close()
         }
     }
 }

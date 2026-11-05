@@ -86,13 +86,15 @@ class MonitorVpnService:VpnService() {
             """.trimIndent())}
             state.value=MonitorState(true,"ACTIVE")
             val nativeDescriptor=ParcelFileDescriptor.dup(checkNotNull(tun).fileDescriptor)
+            val nativeRecorder=checkNotNull(recorder)
             nativeJob=scope.launch{
                 try {
-                    val result=NativeTunnel.run(config.absolutePath,nativeDescriptor.fd,checkNotNull(recorder))
+                    val result=NativeTunnel.run(config.absolutePath,nativeDescriptor.fd,nativeRecorder)
                     if(state.value.running)state.value=MonitorState(false,"ERROR","Native tunnel exited ($result)")
                 }catch(e:Throwable){state.value=MonitorState(false,"ERROR",e.message)}
-                finally{nativeDescriptor.close();config.delete();stopMonitor()}
+                finally{withContext(NonCancellable){runCatching{nativeRecorder.flush()}};nativeDescriptor.close();config.delete();stopMonitor()}
             }
+            nativeJob?.invokeOnCompletion{nativeDescriptor.close();config.delete()}
             scope.launch {while(isActive && state.value.running){delay(2000);state.value=state.value.copy(unrecorded=recorder?.dropped ?: 0)}}
         }catch(e:Exception){state.value=MonitorState(false,"ERROR",e.message);stopMonitor()}
         return START_NOT_STICKY

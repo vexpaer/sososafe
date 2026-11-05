@@ -90,6 +90,7 @@ private fun bytes(value:Long):String=when {value>=1024L*1024*1024->"%.2f GiB".fo
                     if(expanded)NavigationRail{destinations.forEachIndexed{i,d->NavigationRailItem(selected=tab==i,onClick={tab=i;selected=null},icon={Icon(d.icon,t(d.en,d.zh))},label={Text(if(i==1)t("Apps","应用")else t(d.en,d.zh),maxLines=1)})}}
                     Column(Modifier.weight(1f).fillMaxHeight()){
                         if(busy)LinearProgressIndicator(Modifier.fillMaxWidth())
+                        if(progress.status=="IMPORTING")Row(Modifier.fillMaxWidth().padding(horizontal=20.dp),verticalAlignment=Alignment.CenterVertically){Text(t("Analyzing imported APK…","正在分析导入的 APK…"),Modifier.weight(1f));TextButton(onClick=vm::cancel){Text(t("Cancel","取消"))}}
                         if(selectedApp!=null) AppDetail(selectedApp,connections,vm)
                         else when(tab){
                             0->Dashboard(apps,scans,progress,privilege,settings.mode,vm,onApps={tab=1},onSettings={tab=4})

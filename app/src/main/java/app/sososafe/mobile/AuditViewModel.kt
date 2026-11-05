@@ -21,9 +21,19 @@ class AuditViewModel(application:Application):AndroidViewModel(application) {
     val privilege=repo.access.state;val progress=repo.progress
     val message=MutableStateFlow<String?>(null);val busy=MutableStateFlow(false)
     val plan=MutableStateFlow<ActionPlan?>(null)
-    fun scan(){repo.scan(viewModelScope)}
-    fun cancel(){repo.cancelScan()}
-    fun importApk(uri:Uri)=task {repo.importApk(uri);message.value="APK analysis saved / APK 分析已保存"}
+    private var importJob:Job?=null
+    fun scan(){if(importJob?.isActive==true){message.value="Wait for or cancel the APK import / 请等待或取消 APK 导入";return};repo.scan(viewModelScope)}
+    fun cancel(){repo.cancelScan();importJob?.cancel()}
+    fun importApk(uri:Uri){
+        if(importJob?.isActive==true || progress.value.status=="SCANNING"){message.value="Finish or cancel the current scan first / 请先完成或取消当前扫描";return}
+        importJob=viewModelScope.launch(Dispatchers.IO){
+            busy.value=true;progress.value=ScanProgress("IMPORTING",0,1,"APK")
+            try{repo.importApk(uri);progress.value=ScanProgress("COMPLETED",1,1);message.value="APK analysis saved / APK 分析已保存"}
+            catch(e:CancellationException){progress.value=ScanProgress("CANCELLED");message.value="APK import cancelled / APK 导入已取消";throw e}
+            catch(e:Exception){progress.value=ScanProgress("ERROR",error=e.message);message.value=e.message}
+            finally{busy.value=false}
+        }
+    }
     fun refresh(){repo.access.refresh()}
     fun root()=task {repo.access.requestRoot();message.value=repo.access.state.value.message}
     fun shizuku(){runCatching{repo.access.requestShizuku()}.onFailure{message.value=it.message}}

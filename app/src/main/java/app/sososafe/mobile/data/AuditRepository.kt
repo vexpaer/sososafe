@@ -78,7 +78,7 @@ class AuditRepository(private val context:Context,val db:AuditDatabase,val setti
         try {
             checkNotNull(context.contentResolver.openInputStream(uri)).use { input -> file.outputStream().use { output ->
                 val buf=ByteArray(32768);var size=0L
-                while(true){val n=input.read(buf);if(n<0)break;size+=n;require(size<=512L*1024*1024){"APK exceeds 512 MiB"};output.write(buf,0,n)}
+                while(true){currentCoroutineContext().ensureActive();val n=input.read(buf);if(n<0)break;size+=n;require(size<=512L*1024*1024){"APK exceeds 512 MiB"};output.write(buf,0,n)}
             } }
             val job=currentCoroutineContext()[Job]; val analysis=ApkAnalyzer.analyze(listOf(file)){job?.ensureActive()}
             val m=checkNotNull(analysis.manifest){"APK Manifest could not be read: ${analysis.limitations.joinToString()}"}
@@ -93,7 +93,7 @@ class AuditRepository(private val context:Context,val db:AuditDatabase,val setti
         val savedScans=dao.allScans().map { json.decodeFromString<ScanRecord>(it.json) }
         val report=AuditReport(generatedAt=System.currentTimeMillis(),device=mapOf("manufacturer" to Build.MANUFACTURER,"model" to Build.MODEL,"android" to Build.VERSION.RELEASE,"api" to Build.VERSION.SDK_INT.toString(),"securityPatch" to Build.VERSION.SECURITY_PATCH),mode=savedScans.firstOrNull()?.mode ?: ScanMode.STANDARD,apps=dao.allApps().map { hydrate(it) },scans=savedScans,connections=dao.allConnections().map { json.decodeFromString(it.json) },actions=dao.allActions().map { json.decodeFromString(it.json) })
         val dir=File(context.filesDir,"reports").apply{mkdirs()}
-        File(dir,"sososafe-${System.currentTimeMillis()}.$format").apply { writeText(ReportWriter.render(report,format)) }
+        File(dir,"sososafe-${System.currentTimeMillis()}.$format").apply { outputStream().use{ReportWriter.write(report,format,it)} }
     }
     suspend fun clearAudit()=withContext(Dispatchers.IO){
         check(scanJob?.isActive!=true){"Cancel the scan first"}

@@ -39,6 +39,12 @@ class PrivilegedUserService : IPrivilegedService.Stub {
     constructor()
     @Suppress("UNUSED_PARAMETER") constructor(context:Context)
     override fun execute(args:Array<String>):String = ReportWriter.json.encodeToString(runCatching { ProcessRunner.run(args.toList()) }.getOrElse { ShellResult(-1,"",it.message ?: "Shell error") })
+    override fun executeStream(args:Array<String>):ParcelFileDescriptor {
+        require(Commands.valid(args.toList()))
+        val pipe=ParcelFileDescriptor.createPipe()
+        Thread({runCatching{ParcelFileDescriptor.AutoCloseOutputStream(pipe[1]).use{it.write(execute(args).toByteArray())}}},"sososafe-shell-output").start()
+        return pipe[0]
+    }
     override fun openApk(path:String):ParcelFileDescriptor = ParcelFileDescriptor.open(File(Commands.apkPath(path)),ParcelFileDescriptor.MODE_READ_ONLY)
     override fun destroy() { kotlin.system.exitProcess(0) }
 }
@@ -87,7 +93,8 @@ class PrivilegedAccess(private val context:Context) {
             ScanMode.SHIZUKU -> {
                 check(mutable.value.shizukuAuthorized && Shizuku.pingBinder()) { "Shizuku stopped or permission revoked" }; bind()
                 withTimeout(10000) { while(service==null) delay(100) }
-                ReportWriter.json.decodeFromString<ShellResult>(checkNotNull(service).execute(tokens.toTypedArray()))
+                val response=ParcelFileDescriptor.AutoCloseInputStream(checkNotNull(service).executeStream(tokens.toTypedArray())).use{ApkAnalyzer.readLimited(it,32*1024*1024).toString(Charsets.UTF_8)}
+                ReportWriter.json.decodeFromString<ShellResult>(response)
             }
             else -> error("Shell unavailable in Standard mode")
         }

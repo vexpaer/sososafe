@@ -50,7 +50,7 @@ jobs:
         run: |
           chmod +x gradlew
           set -o pipefail
-          ./gradlew :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --continue --stacktrace 2>&1 | tee android-build.log
+          ./gradlew :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest --continue --stacktrace 2>&1 | tee android-build.log
       - name: Prepare APK and checksum
         run: |
           mkdir -p dist

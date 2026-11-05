@@ -36,6 +36,6 @@ class AuditViewModel(application:Application):AndroidViewModel(application) {
     fun reconcile()=task{app.actions.reconcileUninstall()}
     fun export(format:String,done:(File)->Unit)=task{val file=repo.export(format);withContext(Dispatchers.Main){done(file)}}
     fun clear()=task{repo.clearAudit();message.value="Audit data cleared; action history and recovery APKs retained / 审计数据已清除，保留处置历史和恢复 APK"}
-    fun shellNetwork()=task{val mode=repo.access.selected(settings.value.mode);message.value=repo.access.execute(mode,listOf("ss","-tunap")).checked().take(12000).ifBlank{"No socket records visible / 未获得可见连接"}}
+    fun shellNetwork()=task{val mode=repo.access.selected(settings.value.mode);message.value=repo.access.execute(mode,listOf("ss","-tunape")).checked().take(12000).ifBlank{"No socket records visible / 未获得可见连接"}}
     private fun task(block:suspend ()->Unit) {viewModelScope.launch(Dispatchers.IO){busy.value=true;try{block()}catch(e:CancellationException){throw e}catch(e:Exception){message.value=e.message ?: e.javaClass.simpleName}finally{busy.value=false}}}
 }

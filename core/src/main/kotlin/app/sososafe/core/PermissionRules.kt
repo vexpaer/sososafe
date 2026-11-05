@@ -24,10 +24,11 @@ object PermissionRules {
     fun group(name: String): String = groups.entries.firstOrNull { name.substringAfterLast('.') in it.value }?.key ?: "Other"
     fun protection(base: Int): String = when (base and 15) { 0 -> "normal"; 1 -> "dangerous"; 2, 3 -> "signature/system"; 4 -> "internal"; else -> "unknown" }
     fun granted(flags: Int?): Boolean? = flags?.let { it and 2 != 0 }
-    fun audit(permissions: List<PermissionFact>): List<Finding> = permissions.filter { it.group != "Other" }.map {
-        val active = it.granted == true || it.specialState == "enabled"
+    fun audit(permissions: List<PermissionFact>): List<Finding> = permissions.filter { it.group != "Other" }.groupBy{it.name}.values.map{facts->facts.maxBy{if(it.specialState=="enabled")3 else if(it.granted==true)2 else 1}}.map {
+        val restricted=it.appOp in setOf("ignore","deny")
+        val active = !restricted && (it.granted == true || it.specialState == "enabled" || (it.name.substringAfterLast('.') in special && it.appOp in setOf("allow","foreground")))
         val weight = when(it.group) { "SMS", "Call Logs", "Accessibility", "Device Administrator", "Screen Capture" -> 7; "Location", "Contacts", "Microphone", "Camera", "Files" -> 5; else -> 2 }
-        Finding("permission:${it.name}", "${it.group}: ${if(active) "granted/enabled" else if(it.granted == false) "declared, not granted" else "state unknown"}", if(active) Severity.MEDIUM else Severity.LOW,
+        Finding("permission:${it.name}", "${it.group}: ${if(restricted) "restricted by AppOps" else if(active) "granted/enabled" else if(it.granted == false) "declared, not granted" else "state unknown"}", if(active) Severity.MEDIUM else Severity.LOW,
             if(active) weight else 1, Evidence(it.evidence, "${it.name}; declared=${it.declared}; granted=${it.granted}; AppOps=${it.appOp}; special=${it.specialState}", EvidenceLevel.CAPABILITY), "Review whether this access is needed. A declaration alone is not active access.")
     }
 }

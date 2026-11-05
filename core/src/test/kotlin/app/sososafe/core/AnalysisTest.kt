@@ -15,6 +15,8 @@ class AnalysisTest {
         assertEquals("Location",PermissionRules.group("android.permission.ACCESS_FINE_LOCATION"))
         assertEquals("signature/system",PermissionRules.protection(0x12));assertEquals("dangerous",PermissionRules.protection(1))
         assertEquals("Screen Capture",PermissionRules.group("FOREGROUND_SERVICE_MEDIA_PROJECTION"))
+        val granted=PermissionFact("android.permission.CAMERA","Camera","dangerous",granted=true)
+        assertTrue(PermissionRules.audit(listOf(granted)).single().points>PermissionRules.audit(listOf(granted.copy(appOp="ignore"))).single().points)
     }
     @Test fun boundedSuffixDomainRules(){
         assertTrue(DomainRules.classify("x.app-measurement.com").tracker)
@@ -23,6 +25,8 @@ class AnalysisTest {
         assertEquals("Authentication",DomainRules.classify("accounts.google.com").category)
         assertEquals("app-measurement.com",DomainRules.normalize("https://APP-MEASUREMENT.com/v1?q=1"))
         assertNull(DomainRules.normalize("https://"));assertTrue(DomainRules.extract("https://app-measurement.com/collect","fixture").single().tracker)
+        assertEquals("api.example.com",DomainRules.extract("api.example.com/v1","fixture").single().host)
+        assertTrue(DomainRules.extract("com.umeng.analytics","fixture").isEmpty())
     }
     private val manifest="""<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="test.audit"><uses-sdk android:targetSdkVersion="35"/><uses-permission android:name="android.permission.CAMERA"/><application android:permission="test.audit.PROTECTED" android:debuggable="true" android:networkSecurityConfig="@xml/network"><activity android:name=".Main" android:exported="true"/><provider android:name=".Data" android:authorities="test.audit"/><service android:name=".Worker"><intent-filter><action android:name="test.action"/></intent-filter></service></application></manifest>"""
     @Test fun manifestDefaultsAndInheritedProtection(){

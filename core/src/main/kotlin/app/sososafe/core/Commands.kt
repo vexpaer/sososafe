@@ -16,7 +16,7 @@ object Commands {
     fun restoreEnabled(p:String,state:Int,user:Int):List<String> { require(state in 0..4); return listOf("pm",when(state){0->"default-state";1->"enable";2->"disable";3->"disable-user";else->"disable-until-used"},"--user",user(user),packageName(p)) }
     fun valid(tokens:List<String>):Boolean = runCatching {
         require(tokens.size<=10 && tokens.all { it.length<=300 && it.none { c -> c=='\u0000' || c=='\n' || c=='\r' } })
-        tokens==listOf("id") || tokens==listOf("ss","-tunap") || tokens==listOf("dumpsys","connectivity") ||
+        tokens==listOf("id") || tokens==listOf("ss","-tunap") || tokens==listOf("ss","-tunape") || tokens==listOf("dumpsys","connectivity") ||
             (tokens.size==7 && tokens.take(5)==listOf("pm","list","packages","-U","-u") && tokens[5]=="--user" && tokens[6].toInt() in 0..99999) ||
             (tokens.size==5 && tokens.take(3)==listOf("pm","path","--user") && tokens[3].toInt() in 0..99999 && packageName(tokens[4]).isNotEmpty()) ||
             (tokens.size==3 && tokens.take(2)==listOf("dumpsys","package") && packageName(tokens[2]).isNotEmpty()) ||

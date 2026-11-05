@@ -8,6 +8,13 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 class NetworkTest {
+    @Test fun shellOwnershipRequiresUidAndExactTuple(){
+        val records=SocketOwnership.parseSs("tcp ESTAB 0 0 10.82.0.1:12000 8.8.8.8:443 users:((app,pid=42)) uid:10123\nudp ESTAB 0 0 [::1]:14000 [2001:4860:4860::8888]:53 uid:10124\ntcp ESTAB 0 0 10.0.0.1:10 8.8.8.8:443 users:((x,pid=9))")
+        assertEquals(2,records.size)
+        assertEquals(10123,records[SocketOwnership.key(6,"10.82.0.1",12000,"8.8.8.8",443)])
+        assertNull(records[SocketOwnership.key(6,"10.82.0.1",12001,"8.8.8.8",443)])
+        assertNull(SocketOwnership.address("attacker.example"))
+    }
     @Test fun ipv4UdpAndIpv6TcpHeaders(){
         val udp=ByteArray(32);udp[0]=0x45;udp[3]=32;udp[9]=17;udp[12]=10;udp[15]=1;udp[16]=8;udp[17]=8;udp[18]=8;udp[19]=8;udp[20]=0x30;udp[21]=0x39;udp[23]=53;udp[25]=12
         val p=Packets.parse(udp)!!;assertEquals(12345,p.sourcePort);assertEquals(53,p.destinationPort);assertEquals("8.8.8.8",p.destination)

@@ -4,7 +4,7 @@ Android compilation, Lint, tests and packaging run entirely in GitHub Actions. N
 
 ## Release gate
 
-The release workflow requires a successful **Android CI run for the exact source commit**. It then runs Release unit tests and Lint, signs the APK, verifies its signature and publishes the APK with SHA256. The release notes link the successful source CI run; the release job summary repeats that link.
+The release workflow requires a successful **Android CI run for the exact source commit**. It then runs the shared unit-test tasks and Release Lint, signs the APK, verifies its signature and publishes the APK with SHA256. The release notes link the successful source CI run; the release job summary repeats that link. The app's registered unit-test entry is `testDebugUnitTest`; the 52 engine tests are in `core:test` and all device tests are required by the source CI gate.
 
 | Check | Required coverage |
 |---|---|

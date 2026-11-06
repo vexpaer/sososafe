@@ -46,6 +46,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - name: Validate signing key and alias
+        run: |
+          keytool -list -storetype PKCS12 -keystore "$SIGNING_KEYSTORE_PATH" -storepass:env SIGNING_STORE_PASSWORD
+          keytool -list -storetype PKCS12 -keystore "$SIGNING_KEYSTORE_PATH" -storepass:env SIGNING_STORE_PASSWORD -alias "$SIGNING_KEY_ALIAS" >/dev/null
       - uses: android-actions/setup-android@v3
         with:
           cmdline-tools-version: '16111833'
@@ -61,7 +65,7 @@ jobs:
         run: |
           chmod +x gradlew
           set -o pipefail
-          ./gradlew :core:test :app:testReleaseUnitTest :app:lintRelease :app:assembleRelease --continue --stacktrace 2>&1 | tee release-build.log
+          ./gradlew :core:test :app:testDebugUnitTest :app:lintRelease :app:assembleRelease --continue --stacktrace 2>&1 | tee release-build.log
       - name: Verify signature and prepare download
         run: |
           mkdir -p dist

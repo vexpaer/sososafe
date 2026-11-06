@@ -1,8 +1,9 @@
 # Changelog
 
-## 1.0.0
+## 0.1.0
 
-- Kotlin/Material 3 native auditor with bilingual UI, dynamic color, light/dark/system themes.
+- Kotlin/Material 3 native auditor with first-run Chinese/English selection, persistent language settings, dynamic color and light/dark/system themes.
+- Quiet rounded panels, fine borders, compact connection cards and adaptive phone/tablet navigation.
 - Unified Standard, Shizuku and explicitly authorized Root scanning.
 - APK/DEX/Manifest analysis, offline SDK/domain signatures, explainable scoring and evidence correlations.
 - Local dual-stack TCP/UDP VPN relay and observed DNS/UID metadata.

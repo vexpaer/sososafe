@@ -64,7 +64,7 @@ class MonitorVpnService:VpnService() {
                     java.net.Inet6Address.getByAddress(null,resolved.address,java.net.NetworkInterface.getByName(checkNotNull(networkInterface)))
                 }else resolved
             }
-            proxy=LocalSocksProxy(user,pass,::tcp,::udp,::route){e->if(BuildConfig.DEBUG)android.util.Log.w("SosoRelay",e.javaClass.simpleName+": "+e.message)}
+            proxy=LocalSocksProxy(user,pass,::tcp,::udp,::route){e->if(BuildConfig.DEBUG)android.util.Log.w("SosoRelay",e.javaClass.simpleName)}
             val builder=Builder().setSession("sososafe · local metadata monitor").setMtu(1500).addAddress("10.82.0.1",32).addAddress("fd82:5afe::1",128).addRoute("0.0.0.0",0).addRoute("::",0).addDisallowedApplication(packageName).setBlocking(false)
             check(dnsServers.isNotEmpty()){ "No network DNS resolver available. Connect to Wi-Fi or mobile data and retry." }
             // A virtual DNS destination follows the current physical resolver after network changes.
@@ -89,8 +89,8 @@ class MonitorVpnService:VpnService() {
                 misc:
                   task-stack-size: 86016
                   max-session-count: 256
-                  log-level: ${if(BuildConfig.DEBUG)"debug" else "error"}
-                  log-file: ${if(BuildConfig.DEBUG)File(filesDir,"tunnel-debug.log").also{it.writeText("")}.absolutePath else "/dev/null"}
+                  log-level: error
+                  log-file: /dev/null
             """.trimIndent())}
             currentSession=session;monitoring=true;state.value=MonitorState(true,"ACTIVE")
             val nativeDescriptor=ParcelFileDescriptor.dup(checkNotNull(tun).fileDescriptor)

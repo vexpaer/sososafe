@@ -15,6 +15,7 @@ import app.sososafe.core.*
 import app.sososafe.mobile.platform.*
 import app.sososafe.mobile.platform.vpn.MonitorVpnService
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.first
 import org.junit.*
 import org.junit.Assert.*
 import org.junit.runner.RunWith
@@ -32,6 +33,38 @@ class DeviceTest {
     private val app=context as SosoApplication
     private val automation=InstrumentationRegistry.getInstrumentation().uiAutomation
     private fun shell(command:String):String=android.os.ParcelFileDescriptor.AutoCloseInputStream(automation.executeShellCommand(command)).bufferedReader().use{it.readText()}
+    @Before fun firstRunChoosesLanguage()=runBlocking {
+        if(!app.repo.settings.flow.first().languageChosen){
+            val activity=ActivityScenario.launch(MainActivity::class.java)
+            try{
+                val device=UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+                assertTrue(device.wait(Until.hasObject(By.text("选择语言 / Choose language")),10000))
+                device.takeScreenshot(File(context.getExternalFilesDir(null),"first-launch-language.png"))
+                device.findObject(By.text("English")).click()
+                withTimeout(10000){while(app.repo.settings.flow.first().language!="en")delay(100)}
+                assertTrue(app.repo.settings.flow.first().languageChosen)
+            }finally{activity.close()}
+        }
+    }
+    @Test fun interfaceLanguageSwitchesAndPersists()=runBlocking {
+        val activity=ActivityScenario.launch(MainActivity::class.java)
+        try{
+            val device=UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+            app.repo.settings.set("language","zh")
+            assertTrue(device.wait(Until.hasObject(By.text("概览")),10000))
+            device.findObject(By.text("设置")).click()
+            assertTrue(device.wait(Until.hasObject(By.text("界面语言")),10000))
+            device.takeScreenshot(File(context.getExternalFilesDir(null),"settings-chinese.png"))
+            device.findObject(By.text("界面语言")).click()
+            assertTrue(device.wait(Until.hasObject(By.text("English")),5000))
+            device.findObject(By.text("English")).click()
+            assertTrue(device.wait(Until.hasObject(By.text("Language")),10000))
+            assertEquals("en",app.repo.settings.flow.first().language)
+            activity.recreate()
+            assertTrue(device.wait(Until.hasObject(By.text("Overview")),10000))
+            assertFalse(device.hasObject(By.text("选择语言 / Choose language")))
+        }finally{activity.close()}
+    }
     @Test fun standardScanReadsRealMetadataAndApk()=runBlocking {
         val scanner=PackageScanner(context,app.repo.access,ScanMode.STANDARD)
         val inventory=scanner.inventory();assertTrue(inventory.any{it.name==context.packageName})

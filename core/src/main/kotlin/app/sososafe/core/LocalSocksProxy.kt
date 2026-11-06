@@ -53,7 +53,9 @@ class LocalSocksProxy(
                 val remote=Socket();resources+=remote
                 var accepted=false
                 try {
-                    protectTcp(remote);remote.tcpNoDelay=true;remote.connect(InetSocketAddress(routeAddress(host,port),port),15000)
+                    // Android's new Socket has no native descriptor until bind/connect.
+                    // Bind locally before protect; connect only after the VPN exemption.
+                    remote.bind(InetSocketAddress(0));protectTcp(remote);remote.tcpNoDelay=true;remote.connect(InetSocketAddress(routeAddress(host,port),port),15000)
                     reply(output,0);accepted=true;client.soTimeout=0
                     val up=executor.submit {try{client.getInputStream().copyTo(remote.getOutputStream())}catch(_:Exception){}finally{runCatching{remote.shutdownOutput()}}}
                     try{remote.getInputStream().copyTo(output);output.flush()}finally{runCatching{client.shutdownOutput()};up.get(10,TimeUnit.SECONDS)}
@@ -88,7 +90,7 @@ class LocalSocksProxy(
                     if(remote==null) {
                         if(!flowLimit.tryAcquire())continue
                         val created=DatagramSocket(null);resources+=created
-                        try {protectUdp(created);created.bind(InetSocketAddress(0));created.connect(routeAddress(target,targetPort),targetPort);created.soTimeout=30000}
+                        try {created.bind(InetSocketAddress(0));protectUdp(created);created.connect(routeAddress(target,targetPort),targetPort);created.soTimeout=30000}
                         catch(e:Exception){resources.remove(created);created.close();flowLimit.release();throw e}
                         flows[key]=created;remote=created
                         executor.execute {

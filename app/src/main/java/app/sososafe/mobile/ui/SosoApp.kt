@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -29,12 +30,14 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.sososafe.core.*
 import app.sososafe.mobile.AuditViewModel
+import app.sososafe.mobile.BuildConfig
 import app.sososafe.mobile.platform.vpn.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -45,12 +48,13 @@ import java.util.Date
 
 private data class Destination(val en:String,val zh:String,val icon:ImageVector)
 private val destinations=listOf(Destination("Overview","概览",Icons.Default.Shield),Destination("Applications","应用",Icons.Default.Apps),Destination("Network","网络",Icons.Default.Lan),Destination("Actions","处置",Icons.Default.Rule),Destination("Settings","设置",Icons.Default.Settings))
-private fun date(time:Long?)=time?.let{DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT).format(Date(it))} ?: "—"
-private fun bytes(value:Long):String=when {value>=1024L*1024*1024->"%.2f GiB".format(value/1073741824.0);value>=1024*1024->"%.1f MiB".format(value/1048576.0);value>=1024->"%.1f KiB".format(value/1024.0);else->"$value B"}
+internal fun date(time:Long?)=time?.let{DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT).format(Date(it))} ?: "—"
+internal fun bytes(value:Long):String=when {value>=1024L*1024*1024->"%.2f GiB".format(value/1073741824.0);value>=1024*1024->"%.1f MiB".format(value/1048576.0);value>=1024->"%.1f KiB".format(value/1024.0);else->"$value B"}
 
 @Composable fun SosoApp(vm:AuditViewModel){
     val settings by vm.settings.collectAsStateWithLifecycle()
     SosoTheme(settings){
+        if(!settings.loaded){Surface(Modifier.fillMaxSize()){Box(contentAlignment=Alignment.Center){CircularProgressIndicator()}};return@SosoTheme}
         val apps by vm.apps.collectAsStateWithLifecycle();val scans by vm.scans.collectAsStateWithLifecycle()
         val connections by vm.connections.collectAsStateWithLifecycle();val actions by vm.actions.collectAsStateWithLifecycle()
         val progress by vm.progress.collectAsStateWithLifecycle();val privilege by vm.privilege.collectAsStateWithLifecycle()
@@ -79,7 +83,7 @@ private fun bytes(value:Long):String=when {value>=1024L*1024*1024->"%.2f GiB".fo
         BoxWithConstraints(Modifier.fillMaxSize()){
             val expanded=maxWidth>=840.dp
             Scaffold(
-                topBar={TopAppBar(title={Text(if(selectedApp!=null)selectedApp.label else if(tab==0)"sososafe" else t(destinations[tab].en,destinations[tab].zh))},navigationIcon={if(selectedApp!=null)IconButton(onClick={selected=null}){Icon(Icons.AutoMirrored.Filled.ArrowBack,t("Back","返回"))}},actions={
+                topBar={TopAppBar(title={Text(if(selectedApp!=null)selectedApp.label else t(destinations[tab].en,destinations[tab].zh),fontWeight=FontWeight.SemiBold,maxLines=1,overflow=TextOverflow.Ellipsis)},colors=TopAppBarDefaults.topAppBarColors(containerColor=MaterialTheme.colorScheme.background),navigationIcon={if(selectedApp!=null)IconButton(onClick={selected=null}){Icon(Icons.AutoMirrored.Filled.ArrowBack,t("Back","返回"))}},actions={
                     if(tab==1 && selectedApp==null)IconButton(onClick={picker.launch(arrayOf("application/vnd.android.package-archive","application/octet-stream","application/zip"))},enabled=!busy){Icon(Icons.Default.FileOpen,t("Import APK","导入 APK"))}
                     if(selectedApp!=null)IconButton(onClick={openSettings(context,selectedApp.packageName)},enabled=!selectedApp.imported){Icon(Icons.Default.OpenInNew,t("App details","应用详情"))}
                 })},
@@ -103,6 +107,7 @@ private fun bytes(value:Long):String=when {value>=1024L*1024*1024->"%.2f GiB".fo
                 }
             }
         }
+        if(!settings.languageChosen)AlertDialog(onDismissRequest={},title={Text("选择语言 / Choose language")},text={Column(verticalArrangement=Arrangement.spacedBy(12.dp)){OutlinedButton(onClick={vm.set("language","zh")},modifier=Modifier.fillMaxWidth()){Text("中文")};OutlinedButton(onClick={vm.set("language","en")},modifier=Modifier.fillMaxWidth()){Text("English")}}},confirmButton={})
         if(vpnDialog)AlertDialog(onDismissRequest={vpnDialog=false},title={Text(t("Start local monitoring?","启动本地网络监控？"))},text={Text(t("Android will ask for VPN permission. The existing VPN will be replaced. TCP/UDP traffic is forwarded on this device; only connection and DNS metadata is saved. No HTTPS decryption. sososafe's own traffic is excluded. Encrypted DNS and ECH may hide names. Network switches can require apps to reconnect.","Android 将请求 VPN 授权，并替换当前 VPN。TCP/UDP 流量在设备本地转发，仅保存连接和 DNS 元数据。不解密 HTTPS。排除 sososafe 自身流量。加密 DNS 与 ECH 可能隐藏域名，切换网络时应用可能需要重连。"))},confirmButton={TextButton(onClick={vpnDialog=false;val required=buildList { if(Build.VERSION.SDK_INT>=33)add(Manifest.permission.POST_NOTIFICATIONS);if(Build.VERSION.SDK_INT>=37)add("android.permission.ACCESS_LOCAL_NETWORK") }.filter{context.checkSelfPermission(it)!=android.content.pm.PackageManager.PERMISSION_GRANTED};if(required.isEmpty())consentVpn()else networkPermissions.launch(required.toTypedArray())}){Text(t("Continue","继续"))}},dismissButton={TextButton(onClick={vpnDialog=false}){Text(t("Cancel","取消"))}})
         if(rootDialog)AlertDialog(onDismissRequest={rootDialog=false},title={Text(t("Request Root authorization","申请 Root 授权"))},text={Text(t("This starts su and may show your KernelSU, Magisk or APatch authorization dialog. Only id is executed to verify access. Scans remain read-only; every change has a separate confirmation.","将调用 su，可能显示 KernelSU、Magisk 或 APatch 的授权窗口。仅执行 id 验证权限。扫描保持只读，每次修改均需另行确认。"))},confirmButton={TextButton(onClick={rootDialog=false;vm.root()}){Text(t("Request Root","申请 Root"))}},dismissButton={TextButton(onClick={rootDialog=false}){Text(t("Cancel","取消"))}})
         plan?.let{p->AlertDialog(onDismissRequest={vm.plan.value=null},title={Text(t("Confirm device change","确认设备修改"))},text={SelectionContainer{Column(Modifier.heightIn(max=420.dp).verticalScroll(rememberScrollState())){Text("${p.app.label}\n${p.app.packageName}",fontWeight=FontWeight.Bold);Text("\n${p.kind}: ${p.argument}\n${p.original} → ${p.desired}\n\n${p.effect}");Text(t("\nOriginal state is saved before execution. Restore from Actions history.","\n执行前保存原始状态，可在处置历史中恢复。"))}}},confirmButton={TextButton(onClick=vm::execute){Text(t("Confirm change","确认修改"))}},dismissButton={TextButton(onClick={vm.plan.value=null}){Text(t("Cancel","取消"))}})}
@@ -116,27 +121,29 @@ private fun bytes(value:Long):String=when {value>=1024L*1024*1024->"%.2f GiB".fo
 private fun kotlinx.coroutines.CoroutineScope.launchSafe(vm:AuditViewModel,block:suspend ()->Unit){launch {try{block()}catch(e:Exception){vm.message.value=e.message}}}
 private fun openSettings(context:android.content.Context,pkg:String){context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:$pkg")))}
 
-@Composable private fun Section(title:String,subtitle:String?=null){Column(Modifier.fillMaxWidth().padding(top=20.dp,bottom=8.dp)){Text(title,style=MaterialTheme.typography.titleLarge);if(subtitle!=null)Text(subtitle,style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)}}
-@Composable private fun Empty(icon:ImageVector,title:String,body:String,action:String?=null,onAction:()->Unit={}){Column(Modifier.fillMaxWidth().padding(vertical=36.dp,horizontal=24.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(12.dp)){Icon(icon,null,Modifier.size(40.dp),tint=MaterialTheme.colorScheme.primary);Text(title,style=MaterialTheme.typography.titleLarge);Text(body,style=MaterialTheme.typography.bodyMedium);if(action!=null)Button(onClick=onAction){Text(action)}}}
+@Composable internal fun Section(title:String,subtitle:String?=null){Column(Modifier.fillMaxWidth().padding(top=16.dp,bottom=6.dp)){Text(title,style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold);if(subtitle!=null)Text(subtitle,style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)}}
+@Composable internal fun Panel(content:@Composable ColumnScope.()->Unit){Surface(Modifier.fillMaxWidth(),shape=RoundedCornerShape(16.dp),color=MaterialTheme.colorScheme.surfaceContainerLow,border=BorderStroke(0.75.dp,MaterialTheme.colorScheme.outlineVariant)){Column(Modifier.padding(18.dp),verticalArrangement=Arrangement.spacedBy(12.dp),content=content)}}
+@Composable internal fun modeName(mode:ScanMode?)=when(mode){ScanMode.AUTO->t("Automatic","自动");ScanMode.ROOT->"Root";ScanMode.SHIZUKU->"Shizuku";ScanMode.STANDARD->t("Standard","普通模式");else->t("Authorization required","需要授权")}
+@Composable internal fun MoreInfo(title:String,body:String){var open by remember{mutableStateOf(false)};TextButton(onClick={open=true}){Icon(Icons.Default.Info,null,Modifier.size(18.dp));Spacer(Modifier.width(8.dp));Text(title)};if(open)AlertDialog(onDismissRequest={open=false},title={Text(title)},text={Text(body,Modifier.heightIn(max=440.dp).verticalScroll(rememberScrollState()))},confirmButton={TextButton(onClick={open=false}){Text(t("Close","关闭"))}})}
+@Composable internal fun Empty(icon:ImageVector,title:String,body:String,action:String?=null,onAction:()->Unit={}){Column(Modifier.fillMaxWidth().padding(vertical=36.dp,horizontal=24.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(12.dp)){Icon(icon,null,Modifier.size(40.dp),tint=MaterialTheme.colorScheme.primary);Text(title,style=MaterialTheme.typography.titleLarge);Text(body,style=MaterialTheme.typography.bodyMedium);if(action!=null)Button(onClick=onAction){Text(action)}}}
 @Composable private fun Fact(label:String,value:String){Column(Modifier.fillMaxWidth().padding(vertical=8.dp)){Text(label,style=MaterialTheme.typography.labelLarge,color=MaterialTheme.colorScheme.onSurfaceVariant);SelectionContainer{Text(value,style=MaterialTheme.typography.bodyLarge)}}}
 @Composable private fun Risk(score:Int){val color=when{score>=60->MaterialTheme.colorScheme.error;score>=30->MaterialTheme.colorScheme.tertiary;else->MaterialTheme.colorScheme.primary};Surface(shape=MaterialTheme.shapes.small,color=color.copy(alpha=0.12f)){Text("$score / 100",Modifier.padding(horizontal=10.dp,vertical=6.dp),color=color,style=MaterialTheme.typography.labelLarge)}}
 
 @Composable private fun Dashboard(apps:List<AppRecord>,scans:List<ScanRecord>,progress:app.sososafe.mobile.data.ScanProgress,priv:app.sososafe.mobile.platform.PrivilegeState,preferred:ScanMode,vm:AuditViewModel,onApps:()->Unit,onSettings:()->Unit){
     val mode=runCatching{ModePolicy.select(preferred,priv.rootAuthorized,priv.shizukuAuthorized)}.getOrNull()
-    LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(20.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
-        item{Text(t("Your device, your evidence.","设备隐私，证据可查。"),style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.SemiBold)}
-        item{Text(t("Local analysis. Every finding has a source.","本地分析，每项发现均可追溯来源。"),color=MaterialTheme.colorScheme.onSurfaceVariant)}
-        item{OutlinedCard(onClick=onSettings,modifier=Modifier.fillMaxWidth().padding(vertical=12.dp)){Column(Modifier.padding(16.dp)){Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text(t("Scan mode","扫描模式"),style=MaterialTheme.typography.titleMedium);Text(mode?.name ?: t("Authorization required","需要授权"),color=MaterialTheme.colorScheme.primary)};Text(when(mode){ScanMode.ROOT->t("Authorized su · APK, permissions, AppOps","已授权 su · APK、权限、AppOps");ScanMode.SHIZUKU->t("Shell identity · OEM restrictions may apply","Shell 身份 · 可能受 OEM 限制");else->t("Visible metadata + readable APKs / imported files","可见应用信息 + 可读 APK / 导入文件")},style=MaterialTheme.typography.bodyMedium)}}}
-        item{Section(t("Audit summary","审计概览"),t("Scores prioritize review; they do not certify safety.","评分用于确定检查优先级，并非安全认证。"))}
-        item{Fact(t("Security score (heuristic)","安全评分（启发式）"),if(apps.isEmpty())t("Not scanned","尚未扫描")else "${100-apps.map{it.riskScore}.average().toInt()} / 100")}
-        item{Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(24.dp)){Column(Modifier.weight(1f)){Fact(t("Applications","应用数量"),apps.size.toString());Fact(t("High / medium risk","高 / 中风险"),"${apps.count{it.risk==Severity.HIGH}} / ${apps.count{it.risk==Severity.MEDIUM}}")};Column(Modifier.weight(1f)){Fact(t("Unique endpoints","独立端点"),apps.flatMap{it.analysis.endpoints}.map{it.host}.distinct().size.toString());Fact(t("Tracking services","追踪服务"),apps.flatMap{it.analysis.endpoints}.filter{it.tracker}.map{it.provider+it.host}.distinct().size.toString())}}}
-        item{Fact(t("Last scan","上次扫描"),scans.firstOrNull()?.let{"${date(it.startedAt)} · ${it.status}"} ?: t("No scan history","暂无扫描记录"))}
+    LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(horizontal=20.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(16.dp)){
+        item{Panel{
+            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Surface(shape=RoundedCornerShape(12.dp),color=MaterialTheme.colorScheme.primaryContainer){Icon(Icons.Default.Shield,null,Modifier.padding(12.dp).size(28.dp),tint=MaterialTheme.colorScheme.onPrimaryContainer)};Spacer(Modifier.width(14.dp));Column(Modifier.weight(1f)){Text(t("Privacy audit","隐私审计"),style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.SemiBold);Text(if(apps.isEmpty())t("Ready to scan","准备扫描")else t("Results saved","结果已保存"),style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)};TextButton(onClick=onSettings){Text(modeName(mode));Icon(Icons.Default.ChevronRight,null,Modifier.size(18.dp))}}
+            HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant)
+            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Text(t("Security score","安全评分"),style=MaterialTheme.typography.bodyLarge);Text(if(apps.isEmpty())"—"else "${100-apps.map{it.riskScore}.average().toInt()} / 100",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Medium,color=MaterialTheme.colorScheme.primary)}
+        }}
+        item{Panel{Row(horizontalArrangement=Arrangement.spacedBy(24.dp)){Column(Modifier.weight(1f)){Fact(t("Applications","应用"),apps.size.toString());Fact(t("High / medium risk","高 / 中风险"),"${apps.count{it.risk==Severity.HIGH}} / ${apps.count{it.risk==Severity.MEDIUM}}")};Column(Modifier.weight(1f)){Fact(t("Endpoints","网络端点"),apps.flatMap{it.analysis.endpoints}.map{it.host}.distinct().size.toString());Fact(t("Tracking services","追踪服务"),apps.flatMap{it.analysis.endpoints}.filter{it.tracker}.map{it.provider+it.host}.distinct().size.toString())}}}}
         if(progress.status=="SCANNING")item{Column(verticalArrangement=Arrangement.spacedBy(8.dp)){LinearProgressIndicator(progress={if(progress.total>0)progress.done.toFloat()/progress.total else 0f},modifier=Modifier.fillMaxWidth());Text("${progress.done} / ${progress.total} · ${progress.current}",style=MaterialTheme.typography.bodySmall);OutlinedButton(onClick=vm::cancel){Text(t("Cancel scan","取消扫描"))}}}
-        else item{Button(onClick=vm::scan,modifier=Modifier.fillMaxWidth()){Icon(Icons.Default.Search,null);Spacer(Modifier.width(8.dp));Text(t("Scan applications","扫描应用"))}}
-        if(progress.status in listOf("COMPLETED","CANCELLED","ERROR"))item{Text(when(progress.status){"COMPLETED"->t("Scan completed. Results are saved locally.","扫描已完成，结果已本地保存。");"CANCELLED"->t("Scan cancelled. Finished app results were retained.","扫描已取消，保留已完成的应用结果。");else->progress.error ?: t("Scan failed. Check access in Settings.","扫描失败，请在设置中检查权限。")},color=if(progress.status=="ERROR")MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)}
-        item{TextButton(onClick=onApps){Text(t("Review applications","查看应用结果"));Icon(Icons.Default.ChevronRight,null)}}
-        item{Section(t("What the evidence means","如何理解证据"))}
-        item{Text(t("Capability → static reference → observed connection → confirmed content. sososafe records the first three separately and never infers personal data disclosure from them. HTTPS content is not inspected.","访问能力 → 静态引用 → 实际连接 → 已确认内容。sososafe 分别记录前三类证据，不据此推断个人数据已经泄露，也不检查 HTTPS 明文。"),style=MaterialTheme.typography.bodyMedium)}
+        else item{Button(onClick=vm::scan,modifier=Modifier.fillMaxWidth().heightIn(min=52.dp)){Icon(Icons.Default.Search,null);Spacer(Modifier.width(8.dp));Text(t("Scan applications","扫描应用"))}}
+        if(progress.status in listOf("COMPLETED","CANCELLED","ERROR"))item{Text(when(progress.status){"COMPLETED"->t("Scan complete","扫描完成");"CANCELLED"->t("Scan cancelled","扫描已取消");else->progress.error ?: t("Scan failed. Check access in Settings.","扫描失败，请检查访问权限。")},color=if(progress.status=="ERROR")MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)}
+        if(scans.isNotEmpty())item{Text(t("Last scan · ","上次扫描 · ")+date(scans.first().startedAt),style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)}
+        if(apps.isNotEmpty())item{TextButton(onClick=onApps){Text(t("View applications","查看应用"));Icon(Icons.Default.ChevronRight,null)}}
+        item{MoreInfo(t("About evidence & scores","证据与评分"),t("Scores prioritize review; they do not certify safety. Capability, static references and observed connections are separate evidence. They do not confirm personal data disclosure. HTTPS content is not inspected.","评分用于确定检查优先级。访问能力、静态引用与实际连接分别记录，不代表已证实个人数据泄露。应用不检查 HTTPS 明文。"))}
     }
 }
 
@@ -148,17 +155,17 @@ private fun openSettings(context:android.content.Context,pkg:String){context.sta
         Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal=16.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)){
             listOf("all" to t("All","全部"),"high" to t("High","高风险"),"medium" to t("Medium","中风险"),"system" to t("System","系统"),"imported" to t("Imported","已导入")).forEach{(key,label)->FilterChip(selected=filter==key,onClick={filter=key},label={Text(label)})}
         }
-        Row(Modifier.fillMaxWidth().padding(horizontal=16.dp),verticalAlignment=Alignment.CenterVertically){Text("${filtered.size} "+t("results","项结果"),Modifier.weight(1f),style=MaterialTheme.typography.labelLarge);Choice(t("Sort","排序"),sort,listOf("risk" to t("Risk","风险"),"name" to t("Name","名称"),"endpoints" to t("Endpoints","端点"))){sort=it}}
+        Row(Modifier.fillMaxWidth().padding(horizontal=16.dp),verticalAlignment=Alignment.CenterVertically){Text("${filtered.size} "+t("results","项结果"),Modifier.weight(1f),style=MaterialTheme.typography.labelLarge);Box(Modifier.width(190.dp)){Choice(t("Sort","排序"),sort,listOf("risk" to t("Risk","风险"),"name" to t("Name","名称"),"endpoints" to t("Endpoints","端点"))){sort=it}}}
         if(apps.isEmpty())Empty(Icons.Default.Apps,t("No audit yet","暂无审计结果"),t("Scan installed applications or import an APK for offline analysis.","扫描已安装应用，或导入 APK 进行离线分析。"),t("Scan applications","扫描应用"),onScan)
         else if(filtered.isEmpty())Empty(Icons.Default.SearchOff,t("No matching applications","没有匹配的应用"),t("Change the search or filter.","请调整搜索条件或筛选项。"))
-        LazyColumn(Modifier.weight(1f)){items(filtered,key={it.packageName}){app->AppRow(app,onClick={onSelect(app)});HorizontalDivider(Modifier.padding(start=72.dp))}}
-        TextButton(onClick=onImport,modifier=Modifier.align(Alignment.CenterHorizontally)){Icon(Icons.Default.FileOpen,null);Spacer(Modifier.width(8.dp));Text(t("Import APK using system picker","通过系统文件选择器导入 APK"))}
+        LazyColumn(Modifier.weight(1f),contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){items(filtered,key={it.packageName}){app->AppRow(app,onClick={onSelect(app)})}}
+        TextButton(onClick=onImport,modifier=Modifier.align(Alignment.CenterHorizontally)){Icon(Icons.Default.FileOpen,null);Spacer(Modifier.width(8.dp));Text(t("Import APK","导入 APK"))}
     }
 }
 @Composable private fun AppRow(app:AppRecord,onClick:()->Unit){
     val context=LocalContext.current
     val icon by produceState<ImageBitmap?>(null,app.packageName){value=withContext(Dispatchers.IO){runCatching{context.packageManager.getApplicationIcon(app.packageName).toBitmap(96,96).asImageBitmap()}.getOrNull()}}
-    ListItem(headlineContent={Text(app.label,maxLines=2)},supportingContent={Column{Text(app.packageName,style=MaterialTheme.typography.bodySmall);Text("${app.analysis.endpoints.size} "+t("endpoints","个端点")+" · "+app.permissions.filter{it.group!="Other"}.map{it.group}.distinct().take(3).joinToString(),style=MaterialTheme.typography.bodySmall)}},leadingContent={if(icon!=null)Image(icon!!,null,Modifier.size(40.dp))else Icon(Icons.Default.Android,null,Modifier.size(40.dp))},trailingContent={Risk(app.riskScore)},modifier=Modifier.clickable(onClick=onClick))
+    Surface(shape=RoundedCornerShape(16.dp),border=BorderStroke(0.75.dp,MaterialTheme.colorScheme.outlineVariant),color=MaterialTheme.colorScheme.surfaceContainerLow){ListItem(headlineContent={Text(app.label,maxLines=2,fontWeight=FontWeight.Medium)},supportingContent={Column{Text(app.packageName,style=MaterialTheme.typography.bodySmall,maxLines=1,overflow=TextOverflow.Ellipsis);Text("${app.analysis.endpoints.size} "+t("endpoints","个端点")+" · "+app.permissions.filter{it.group!="Other"}.map{it.group}.distinct().take(2).joinToString(),style=MaterialTheme.typography.bodySmall)}},leadingContent={if(icon!=null)Image(icon!!,null,Modifier.size(40.dp))else Icon(Icons.Default.Android,null,Modifier.size(40.dp))},trailingContent={Risk(app.riskScore)},colors=ListItemDefaults.colors(containerColor=MaterialTheme.colorScheme.surfaceContainerLow),modifier=Modifier.clickable(onClick=onClick))}
 }
 
 @Composable private fun AppDetail(app:AppRecord,connections:List<ConnectionRecord>,vm:AuditViewModel){
@@ -215,28 +222,8 @@ private fun openSettings(context:android.content.Context,pkg:String){context.sta
 }
 @Composable private fun FindingRow(f:Finding){Column(Modifier.fillMaxWidth().padding(vertical=8.dp)){Text(f.title,style=MaterialTheme.typography.titleMedium);Text("${f.severity} · weight ${f.points} (before cap) · ${f.evidence.level}",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.primary);SelectionContainer{Text("${f.evidence.source}\n${f.evidence.detail}",style=MaterialTheme.typography.bodySmall)};Text(f.recommendation,Modifier.padding(top=6.dp),style=MaterialTheme.typography.bodyMedium);HorizontalDivider(Modifier.padding(top=12.dp))}}
 
-@Composable private fun NetworkScreen(records:List<ConnectionRecord>,state:MonitorState,onStart:()->Unit,onStop:()->Unit,onShell:()->Unit){
-    var filter by rememberSaveable{mutableStateOf("all")}
-    val filtered=records.filter{when(filter){"dns"->it.dnsQueries.isNotEmpty();"trackers"->it.tracker;"active"->it.state=="ACTIVE" && System.currentTimeMillis()-it.lastSeen<30000;else->true}}
-    LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(20.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
-        item{Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Icon(if(state.running)Icons.Default.VpnKey else Icons.Default.VpnLock,null,Modifier.size(32.dp),tint=MaterialTheme.colorScheme.primary);Spacer(Modifier.width(12.dp));Column(Modifier.weight(1f)){Text(if(state.running)t("Local VPN active","本地 VPN 已启用")else t("Monitoring stopped","监控已停止"),style=MaterialTheme.typography.titleLarge);Text(state.status,style=MaterialTheme.typography.bodySmall)}}}
-        state.error?.let{item{Text(it,color=MaterialTheme.colorScheme.error)}}
-        item{if(state.running)Button(onClick=onStop,modifier=Modifier.fillMaxWidth()){Text(t("Stop monitoring","停止监控"))}else Button(onClick=onStart,modifier=Modifier.fillMaxWidth()){Text(t("Start local monitor","启动本地监控"))}}
-        item{Text(t("Metadata only. HTTPS, DoH/DoT and ECH content stays encrypted. DNS names are associated through observed DNS answers, not domain guesses. IP-based or shared-UID attribution has limits. On Android 8–9, app attribution is Unknown. Device apps may reconnect after a network change.","仅记录元数据，HTTPS、DoH/DoT 与 ECH 内容保持加密。域名来自实际 DNS 响应，不按域名猜测应用。IP 复用与共享 UID 会限制归属精度。Android 8–9 的应用归属显示未知。网络切换后应用可能需要重新连接。"),style=MaterialTheme.typography.bodySmall)}
-        item{Fact(t("Recorded IP traffic (retained records)","已记录 IP 流量（保留的记录）"),"↑ ${bytes(records.sumOf{it.uploaded})}   ↓ ${bytes(records.sumOf{it.downloaded})}");if(state.unrecorded>0)Text(t("Records missed under load: ","高负载下遗漏记录：")+state.unrecorded,color=MaterialTheme.colorScheme.error)}
-        item{Section(t("Traffic by observed UID","按观测 UID 统计流量"))}
-        items(records.groupBy{it.uid}.entries.sortedByDescending{it.value.sumOf{r->r.uploaded+r.downloaded}}.take(30)){entry->Fact(entry.value.flatMap{it.packages}.distinct().joinToString().ifBlank{if(entry.key!=null)"UID ${entry.key}"else t("Unknown / device level","未知 / 设备级")},"↑ ${bytes(entry.value.sumOf{it.uploaded})} · ↓ ${bytes(entry.value.sumOf{it.downloaded})}")}
-        item{TextButton(onClick=onShell){Text(t("Query privileged socket metadata","查询增强模式系统连接信息"))}}
-        item{Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(8.dp)){listOf("all" to t("All","全部"),"active" to t("Active (30s)","活跃（30秒）"),"dns" to "DNS","trackers" to t("Tracking","追踪")).forEach{(key,label)->FilterChip(selected=filter==key,onClick={filter=key},label={Text(label)})}}}
-        if(filtered.isEmpty())item{Empty(Icons.Default.Lan,t("No observed records","暂无观测记录"),t("Start monitoring and use another app. Encrypted DNS may hide query names.","启动监控后使用其他应用。加密 DNS 可能隐藏查询域名。"))}
-        items(filtered,key={it.id}){c->OutlinedCard(Modifier.fillMaxWidth()){Column(Modifier.padding(14.dp)){Text(c.domain ?: c.remoteIp,style=MaterialTheme.typography.titleMedium);SelectionContainer{Text("${c.protocol} ${c.remoteIp}:${c.remotePort}\n${c.localIp}:${c.localPort}",style=MaterialTheme.typography.bodySmall)};Text(c.packages.joinToString().ifBlank{t("Unknown application","应用未知")},style=MaterialTheme.typography.bodyMedium);Text("${c.attribution} · UID ${c.uid ?: "?"}\n${c.provider} · ${c.category}\n${c.domainEvidence ?: "IP metadata only"}\n↑ ${bytes(c.uploaded)} ↓ ${bytes(c.downloaded)} · ${c.packets} packets · ${c.connections} connections\n${date(c.firstSeen)} → ${date(c.lastSeen)}",style=MaterialTheme.typography.bodySmall);if(c.dnsQueries.isNotEmpty())SelectionContainer{Text("DNS: "+c.dnsQueries.joinToString(),style=MaterialTheme.typography.bodySmall)}}}}
-    }
-}
-
 @Composable private fun ActionsScreen(apps:List<AppRecord>,records:List<ActionRecord>,onApp:(AppRecord)->Unit,onRollback:(ActionRecord)->Unit){
     LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
-        item{Text(t("Read-only until you confirm.","确认之前，仅进行读取。"),style=MaterialTheme.typography.headlineSmall)}
-        item{Text(t("Review evidence before restricting access. Higher scores suggest review, not automatic removal. System applications are protected from disabling and uninstalling.","限制权限前请查看证据。较高评分表示优先检查，不会自动删除应用。系统应用受保护，不提供停用和卸载。"))}
         item{Section(t("Recommended reviews","建议检查"))}
         if(apps.isEmpty())item{Text(t("Scan applications to see recommendations.","扫描应用后将显示检查建议。"))}
         items(apps.filter{it.findings.isNotEmpty()}.sortedByDescending{it.riskScore}.take(30),key={it.packageName}){AppRow(it){onApp(it)}}
@@ -246,38 +233,5 @@ private fun openSettings(context:android.content.Context,pkg:String){context.sta
     }
 }
 
-@Composable private fun SettingsScreen(vm:AuditViewModel,onRoot:()->Unit,onClear:()->Unit,onExport:(String)->Unit){
-    val s by vm.settings.collectAsStateWithLifecycle();val p by vm.privilege.collectAsStateWithLifecycle();val context=LocalContext.current
-    LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(20.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
-        item{Section(t("Device access","设备访问"))}
-        item{Choice(t("Scan mode","扫描模式"),s.mode.name,ScanMode.entries.map{it.name to it.name}){vm.set("mode",it)}}
-        item{Fact("Root","su ${if(p.rootAvailable)t("detected","已检测")else t("not found in visible paths","在可见路径中未找到")} · ${if(p.rootAuthorized)t("authorized this session","本次会话已授权")else t("not authorized","未授权")}");OutlinedButton(onClick=onRoot){Text(t("Request Root authorization","申请 Root 授权"))}}
-        item{Fact("Shizuku","${t("Installed","已安装")}=${p.shizukuInstalled}\n${t("Service alive","服务运行")}=${p.shizukuAlive}\n${t("Authorized","已授权")}=${p.shizukuAuthorized}");Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){OutlinedButton(onClick=vm::shizuku,enabled=p.shizukuAlive){Text(t("Authorize","授权"))};TextButton(onClick={context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("https://shizuku.rikka.app/guide/setup/")))}){Text(t("Setup guide","配置指南"))}}}
-        item{Text(t("Android 11+: start Shizuku on the device using wireless debugging. Earlier Android versions need Root or the standard mode for computer-free use. Shell identity is not Root; OEM restrictions are shown per app.","Android 11 及以上可在设备上通过无线调试启动 Shizuku。较早版本如不使用电脑，可使用 Root 或普通模式。Shell 不等于 Root，OEM 限制会逐项显示。"),style=MaterialTheme.typography.bodySmall);TextButton(onClick=vm::refresh){Text(t("Refresh capabilities","刷新能力状态"))}}
-        item{Section(t("Appearance","外观"))}
-        item{Choice(t("Theme","主题"),s.theme,listOf("system" to t("System","跟随系统"),"light" to t("Light","浅色"),"dark" to t("Dark","深色"))){vm.set("theme",it)}}
-        item{Toggle(t("Dynamic color","动态取色"),s.dynamic){vm.set("dynamic",it)}}
-        item{Choice(t("Manual accent","手动主题色"),s.color,listOf("teal" to t("Teal","青绿"),"blue" to t("Blue","蓝色"),"plum" to t("Plum","紫色"))){vm.accent(it)}}
-        item{Choice(t("Language","语言"),s.language,listOf("system" to t("System","跟随系统"),"zh" to "中文","en" to "English")){vm.set("language",it)}}
-        item{Section(t("Scanning & storage","扫描与存储"))}
-        item{Toggle(t("Analyze readable APK / DEX files","分析可读 APK / DEX 文件"),s.deepScan){vm.set("deep",it)}}
-        item{Toggle(t("Include system applications","包含系统应用"),s.includeSystem){vm.set("system",it)}}
-        item{Choice(t("Network history retention","网络记录保留时间"),s.retentionDays.toString(),listOf("1" to t("1 day","1 天"),"7" to t("7 days","7 天"),"30" to t("30 days","30 天"))){vm.retention(it.toInt())}}
-        item{Text(t("The local Room database retains up to 20,000 recent connection tuples. Reports and preserved uninstall APKs remain private in app storage. Uninstalling sososafe removes this data.","本地 Room 数据库最多保留 20,000 条近期连接。报告与卸载前保留的 APK 位于应用私有存储。卸载 sososafe 将删除这些数据。"),style=MaterialTheme.typography.bodySmall);OutlinedButton(onClick=onClear){Text(t("Clear audit data","清除审计数据"))}}
-        item {
-            Section(t("Reports","审计报告"))
-            Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                listOf("json","md","txt").forEach { format ->
-                    OutlinedButton(onClick={onExport(format)}) { Text(format.uppercase()) }
-                }
-            }
-        }
-        item{OutlinedButton(onClick={context.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,Uri.parse("package:${context.packageName}")))}){Text(t("Allow APK recovery installs","允许安装用于恢复的 APK"))}}
-        item{Section(t("Privacy & About","隐私与关于"))}
-        item{Text(t("sososafe 1.0.0\nNo accounts, telemetry, ads or uploaded scans. All analysis is local. The local relay forwards only your device's requested traffic; no external VPN server is used. HTTPS is not decrypted and payloads are not retained. DNS query names, IPs, UID and app inventory can be sensitive. Use the stop notification to end monitoring at any time.","sososafe 1.0.0\n无需账户、无遥测、无广告、不上传扫描结果。所有分析均在本地进行。本地转发器只转发设备请求的网络流量，不使用外部 VPN 服务器。不解密 HTTPS，也不保存网络载荷。DNS 域名、IP、UID 与应用清单属于敏感信息。可随时通过通知停止监控。"))}
-        item{Text(t("QUERY_ALL_PACKAGES is used for the auditor's core inventory. Google Play distribution requires a package visibility policy declaration. This repository provides direct APK installation.","审计工具使用 QUERY_ALL_PACKAGES 获取应用清单。通过 Google Play 分发需遵守应用可见性政策并声明用途。本仓库支持直接下载安装 APK。"),style=MaterialTheme.typography.bodySmall)}
-        item{TextButton(onClick={vm.message.value="NOIR © 2026 Verlintas · MIT\nHevSocks5Tunnel © hev · MIT\nShizuku API · MIT\ndexlib2 · BSD 3-Clause\nAndroidX · Apache 2.0\n\n"+context.assets.open("licenses.txt").bufferedReader().use{it.readText()}}){Text(t("Open-source licenses","开源许可"))}}
-    }
-}
-@Composable private fun Toggle(label:String,checked:Boolean,onChange:(Boolean)->Unit){Row(Modifier.fillMaxWidth().padding(vertical=4.dp),verticalAlignment=Alignment.CenterVertically){Text(label,Modifier.weight(1f));Switch(checked,onChange)}}
-@Composable private fun Choice(label:String,value:String,options:List<Pair<String,String>>,onSelect:(String)->Unit){var open by remember{mutableStateOf(false)};Box{TextButton(onClick={open=true},modifier=Modifier.heightIn(min=48.dp)){Text("$label: ${options.firstOrNull{it.first==value}?.second ?: value}");Icon(Icons.Default.ArrowDropDown,null)};DropdownMenu(expanded=open,onDismissRequest={open=false}){options.forEach{(key,text)->DropdownMenuItem(text={Text(text)},onClick={open=false;onSelect(key)})}}}}
+@Composable internal fun Toggle(label:String,checked:Boolean,onChange:(Boolean)->Unit){Row(Modifier.fillMaxWidth().padding(vertical=4.dp),verticalAlignment=Alignment.CenterVertically){Text(label,Modifier.weight(1f));Switch(checked,onChange)}}
+@Composable internal fun Choice(label:String,value:String,options:List<Pair<String,String>>,onSelect:(String)->Unit){var open by remember{mutableStateOf(false)};Box{Row(Modifier.fillMaxWidth().heightIn(min=48.dp).clickable{open=true}.padding(vertical=6.dp),verticalAlignment=Alignment.CenterVertically){Text(label,Modifier.weight(1f),style=MaterialTheme.typography.bodyLarge);Spacer(Modifier.width(12.dp));Text(options.firstOrNull{it.first==value}?.second ?: value,color=MaterialTheme.colorScheme.primary,maxLines=2,style=MaterialTheme.typography.bodyMedium);Icon(Icons.Default.KeyboardArrowDown,null,Modifier.size(20.dp),tint=MaterialTheme.colorScheme.onSurfaceVariant)};DropdownMenu(expanded=open,onDismissRequest={open=false}){options.forEach{(key,text)->DropdownMenuItem(text={Text(text)},onClick={open=false;onSelect(key)})}}}}

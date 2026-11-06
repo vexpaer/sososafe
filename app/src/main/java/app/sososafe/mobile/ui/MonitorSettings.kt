@@ -3,6 +3,7 @@ package app.sososafe.mobile.ui
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -96,7 +97,7 @@ import app.sososafe.mobile.platform.vpn.MonitorState
 @Composable private fun ConnectionCard(c:ConnectionRecord){
     var expanded by rememberSaveable(c.id){mutableStateOf(false)}
     Column(
-        Modifier.fillMaxWidth().clickable{expanded=!expanded}.padding(vertical=11.dp),
+        Modifier.fillMaxWidth().animateContentSize().clickable{expanded=!expanded}.padding(vertical=11.dp),
         verticalArrangement=Arrangement.spacedBy(5.dp)
     ){
         Row(verticalAlignment=Alignment.CenterVertically){

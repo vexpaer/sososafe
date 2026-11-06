@@ -25,7 +25,7 @@ SoSoSafe is an evidence-first Android privacy inspector. Its interface should fe
 
 Five primary destinations remain stable:
 
-1. Overview — scan state, app count, severity counts, distinct hosts, and the next items to review.
+1. Overview — scan state, app count, severity counts, distinct APK host references, and the next items to review.
 2. Apps — searchable inventory, filters, sort order, and application detail.
 3. Network — local VPN state, per-app traffic, connection metadata, and visibility boundaries.
 4. Actions — findings that need review and the history of confirmed device changes.
@@ -37,7 +37,7 @@ Application detail uses five tabs: Overview, Permissions, Network, Technical, an
 
 Every visible string must serve navigation, identity, value, action, feedback, or essential guidance. Remove subtitles that restate a heading, helper text that repeats a control, decorative captions, and tiny explanatory filler. Put non-obvious or consequential explanations behind an explicit information action.
 
-Keep evidence categories distinct: declared permissions, granted states, AppOps, static APK references, and observed connection metadata are different facts. A permission and an endpoint appearing together do not prove that data was transmitted. Do not present an averaged device-wide security score.
+Keep evidence categories distinct: declared permissions, granted states, AppOps, static APK endpoint references, and observed connection metadata are different facts. Static APK host references must never be presented as observed network traffic. A permission and an endpoint appearing together do not prove that data was transmitted. Do not present an averaged device-wide security score.
 
 Preserve explicit authorization, VPN consent, destructive-action consequences, rollback state, and report-sharing privacy guidance. Icon-only controls retain accessibility labels. Support large system text and do not communicate state through color alone.
 

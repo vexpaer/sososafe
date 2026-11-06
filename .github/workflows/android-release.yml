@@ -29,8 +29,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          passed=$(gh run list --workflow android-ci.yml --commit "$GITHUB_SHA" --status completed --json conclusion --jq '[.[] | select(.conclusion == "success")] | length')
-          if [ "$passed" -lt 1 ]; then echo '::error::This revision needs a successful Android CI run before release.'; exit 1; fi
+          verified=$(gh run list --workflow android-ci.yml --commit "$GITHUB_SHA" --status completed --json conclusion,url --jq '[.[] | select(.conclusion == "success")][0].url // empty')
+          if [ -z "$verified" ]; then echo '::error::This revision needs a successful Android CI run before release.'; exit 1; fi
+          echo "VERIFIED_CI_URL=$verified" >> "$GITHUB_ENV"
+          echo "Verified source: [Android CI]($verified)" >> "$GITHUB_STEP_SUMMARY"
       - name: Require production signing secrets
         run: |
           for key in KEYSTORE_BASE64 SIGNING_STORE_PASSWORD SIGNING_KEY_ALIAS SIGNING_KEY_PASSWORD; do
@@ -61,7 +63,7 @@ jobs:
         run: |
           mkdir -p dist
           cp app/build/outputs/apk/release/app-release.apk dist/sososafe.apk
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose dist/sososafe.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs dist/sososafe.apk | tee signature-verification.txt
           cd dist && sha256sum sososafe.apk > sososafe.apk.sha256
       - uses: actions/upload-artifact@v4
         with:
@@ -74,7 +76,11 @@ jobs:
         run: |
           [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]] || { echo 'Invalid release tag'; exit 1; }
           if [ -f "docs/releases/$RELEASE_TAG.md" ]; then
-            gh release create "$RELEASE_TAG" dist/sososafe.apk dist/sososafe.apk.sha256 --target "$GITHUB_SHA" --title "sososafe $RELEASE_TAG" --notes-file "docs/releases/$RELEASE_TAG.md" --latest
+            notes=$(mktemp)
+            cp "docs/releases/$RELEASE_TAG.md" "$notes"
+            printf '\n\n验证：[Android CI](%s)\n' "$VERIFIED_CI_URL" >> "$notes"
+            gh release create "$RELEASE_TAG" dist/sososafe.apk dist/sososafe.apk.sha256 --target "$GITHUB_SHA" --title "sososafe $RELEASE_TAG" --notes-file "$notes" --latest
+            rm -f -- "$notes"
           else
             gh release create "$RELEASE_TAG" dist/sososafe.apk dist/sososafe.apk.sha256 --target "$GITHUB_SHA" --title "sososafe $RELEASE_TAG" --generate-notes --latest
           fi
@@ -87,6 +93,7 @@ jobs:
             **/build/reports/
             **/build/test-results/
             release-build.log
+            signature-verification.txt
       - name: Remove temporary signing key
         if: always()
         run: rm -f -- "$SIGNING_KEYSTORE_PATH"

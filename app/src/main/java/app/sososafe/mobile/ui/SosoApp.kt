@@ -450,7 +450,8 @@ private fun openSettings(context:android.content.Context,pkg:String){context.sta
                     item { Section(t("Permission states", "权限状态")) }
                     if (app.permissions.isEmpty()) item { Empty(Icons.Default.LockOpen, t("No permission data", "没有权限数据"), t("Permission details are unavailable.", "没有可用的权限详情。")) }
                     items(app.permissions) { permission ->
-                        Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        var expanded by rememberSaveable(permission.name) { mutableStateOf(false) }
+                        Column(Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                     Text(permission.group, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -461,8 +462,9 @@ private fun openSettings(context:android.content.Context,pkg:String){context.sta
                                     style = MaterialTheme.typography.labelLarge,
                                     color = if (permission.granted == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
+                                Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, null, Modifier.padding(start = 6.dp).size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                            SelectionContainer {
+                            if (expanded) SelectionContainer {
                                 Text(
                                     permission.protection + " · Declared=" + permission.declared +
                                         "\nAppOps=" + (permission.appOp ?: "Unknown") +

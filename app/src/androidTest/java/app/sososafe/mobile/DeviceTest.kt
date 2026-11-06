@@ -25,6 +25,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.sqlite.db.SupportSQLiteOpenHelper
 import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import app.sososafe.mobile.data.AuditDatabase
+import app.sososafe.mobile.data.AuditRepository
 import kotlinx.serialization.encodeToString
 
 @RunWith(AndroidJUnit4::class)
@@ -82,7 +83,7 @@ class DeviceTest {
         assertTrue(record.analysis.filesAnalyzed.any{it.endsWith(".dex")});assertTrue(record.permissions.any{it.name=="android.permission.INTERNET"})
         assertTrue(record.riskScore in 0..100);app.repo.save(record)
         listOf("json","md","txt").forEach{val report=app.repo.export(it);assertTrue(report.length()>0);assertTrue(report.readText().contains(context.packageName))}
-        val cold=app.sososafe.mobile.data.AuditRepository(context,app.repo.db,app.repo.settings,app.repo.access)
+        val cold=AuditRepository(context,app.repo.db,app.repo.settings,app.repo.access)
         assertTrue(cold.apps.first().any{it.packageName==context.packageName && it.analysis.filesAnalyzed.isNotEmpty()})
         app.repo.settings.set("language","en")
         val activity=ActivityScenario.launch(MainActivity::class.java)

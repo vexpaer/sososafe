@@ -10,6 +10,7 @@ import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -452,7 +453,7 @@ private fun openSettings(context:android.content.Context,pkg:String){context.sta
                     if (app.permissions.isEmpty()) item { Empty(Icons.Default.LockOpen, t("No permission data", "没有权限数据"), t("Permission details are unavailable.", "没有可用的权限详情。")) }
                     items(app.permissions) { permission ->
                         var expanded by rememberSaveable(permission.name) { mutableStateOf(false) }
-                        Column(Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Column(Modifier.fillMaxWidth().animateContentSize().clickable { expanded = !expanded }.padding(vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                     Text(permission.group, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

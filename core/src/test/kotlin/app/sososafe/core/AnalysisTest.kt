@@ -32,6 +32,8 @@ class AnalysisTest {
         assertNull(DomainRules.normalize("https://"));assertTrue(DomainRules.extract("https://app-measurement.com/collect","fixture").single().tracker)
         assertEquals("api.example.com",DomainRules.extract("api.example.com/v1","fixture").single().host)
         assertTrue(DomainRules.extract("com.umeng.analytics","fixture").isEmpty())
+        assertEquals("192.0.2.1",DomainRules.extract("http://192.0.2.1/api","fixture").single().host)
+        assertEquals(SocketOwnership.address("2001:db8::1"),DomainRules.extract("https://[2001:db8::1]/api","fixture").single().host)
     }
     private val manifest="""<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="test.audit"><uses-sdk android:targetSdkVersion="35"/><uses-permission android:name="android.permission.CAMERA"/><application android:permission="test.audit.PROTECTED" android:debuggable="true" android:networkSecurityConfig="@xml/network"><activity android:name=".Main" android:exported="true"/><provider android:name=".Data" android:authorities="test.audit"/><service android:name=".Worker"><intent-filter><action android:name="test.action"/></intent-filter></service></application></manifest>"""
     @Test fun manifestDefaultsAndInheritedProtection(){
@@ -110,6 +112,7 @@ class AnalysisTest {
     @Test fun parsesDexStringTableAndApkArchive(){
         val dex=dexWithString("https://app-measurement.com/collect")
         val scan=ApkAnalyzer.dex(dex,"fixture.dex")
+        assertFailsWith<java.util.concurrent.CancellationException>{ApkAnalyzer.dex(dex,"fixture.dex"){throw java.util.concurrent.CancellationException()}}
         assertEquals("app-measurement.com",scan.endpoints.single().host);assertTrue(scan.sdks.isEmpty())
         val f=File.createTempFile("audit-fixture",".apk")
         try{ZipOutputStream(f.outputStream()).use{z->z.putNextEntry(ZipEntry("AndroidManifest.xml"));z.write(manifest.toByteArray());z.closeEntry();z.putNextEntry(ZipEntry("classes.dex"));z.write(dex);z.closeEntry()}

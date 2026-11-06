@@ -14,6 +14,7 @@ class NetworkTest {
         assertEquals(10123,records[SocketOwnership.key(6,"10.82.0.1",12000,"8.8.8.8",443)])
         assertNull(records[SocketOwnership.key(6,"10.82.0.1",12001,"8.8.8.8",443)])
         assertNull(SocketOwnership.address("attacker.example"))
+        assertNull(SocketOwnership.address("abc.de"));assertNull(SocketOwnership.address("999.1.2.3"))
     }
     @Test fun ipv4UdpAndIpv6TcpHeaders(){
         val udp=ByteArray(32);udp[0]=0x45;udp[3]=32;udp[9]=17;udp[12]=10;udp[15]=1;udp[16]=8;udp[17]=8;udp[18]=8;udp[19]=8;udp[20]=0x30;udp[21]=0x39;udp[23]=53;udp[25]=12

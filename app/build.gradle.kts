@@ -13,7 +13,7 @@ android {
         minSdk = 26
         targetSdk = 37
         versionCode = 1
-        versionName = "1.0.0"
+        versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
     }
@@ -30,7 +30,7 @@ android {
     }
     buildTypes { release { signingConfig = signingConfigs.getByName("release"); isMinifyEnabled = false } }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
-    buildFeatures { compose = true; aidl = true }
+    buildFeatures { compose = true; aidl = true; buildConfig = true }
     packaging { resources.excludes += setOf("META-INF/LICENSE*", "META-INF/NOTICE*", "META-INF/DEPENDENCIES") }
     lint { abortOnError = true; checkReleaseBuilds = true; htmlReport = true; sarifReport = true }
     testOptions { unitTests.isIncludeAndroidResources = true }

@@ -89,7 +89,7 @@ class DeviceTest {
         val activity=ActivityScenario.launch(MainActivity::class.java)
         try{
             val device=UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-            assertTrue("Saved application results did not load into the UI",device.wait(Until.hasObject(By.text("Results saved")),20000))
+            assertTrue("Saved application results did not load into the UI",device.wait(Until.hasObject(By.text("Audit available")),20000))
             device.takeScreenshot(File(context.getExternalFilesDir(null),"overview-scanned.png"))
         }finally{activity.close()}
     }

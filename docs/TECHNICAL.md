@@ -78,7 +78,7 @@ DNS 问题与 DNS 响应的 IP 关联分别标识；共享 IP/CDN 意味着域�
 
 `core` 为不依赖 Android UI 的模型、分析、协议、命令策略与报告模块；`app/data` 负责 Room/DataStore/仓库；`app/platform` 统一三种扫描模式和处置，`app/platform/vpn` 独立前台服务；`app/ui` 为 Compose 五个页面和详情。数据库操作和分析在 IO dispatcher，扫描可取消；未完成扫描在进程重启后标记 INTERRUPTED。
 
-本地只需 Git 编辑/提交。全部 Android 构建和运行验证由 Actions 完成。不要将模拟器通过等同于 Root 管理器、Shizuku/OEM 或实体设备的实测认证。具体成功运行与验收证据见 `docs/VALIDATION.md`。
+本地只需 Git 编辑/提交。全部 Android 构建和运行验证由 Actions 完成。不要将模拟器通过等同于 Root 管理器、Shizuku/OEM 或实体设备的实测认证。具体成功运行与验收证据见 [VALIDATION.md](VALIDATION.md)。
 
 ## 许可
 

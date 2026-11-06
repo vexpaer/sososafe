@@ -8,8 +8,7 @@
 
 Android 本地隐私审计与网络监控。
 
-[![Release](https://img.shields.io/github/v/release/vexpaer/sososafe?style=flat-square&color=006b5b)](https://github.com/vexpaer/sososafe/releases/latest)
-[![CI](https://github.com/vexpaer/sososafe/actions/workflows/android-ci.yml/badge.svg)](https://github.com/vexpaer/sososafe/actions/workflows/android-ci.yml)
+[![Release](https://img.shields.io/badge/release-v0.1.0-006b5b?style=flat-square)](https://github.com/vexpaer/sososafe/releases/latest)
 [![Android](https://img.shields.io/badge/Android-8.0%2B-006b5b?style=flat-square)](https://github.com/vexpaer/sososafe/releases/latest)
 [![MIT](https://img.shields.io/badge/License-MIT-777?style=flat-square)](LICENSE)
 

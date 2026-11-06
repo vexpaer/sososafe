@@ -4,9 +4,12 @@
 local.properties
 *.jks
 *.keystore
+*.p12
+*.pfx
 *.apk
 *.aab
 *.hprof
 .idea/
 artifacts/
+output/
 *.zip

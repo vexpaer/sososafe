@@ -33,11 +33,20 @@ class DeviceTest {
     private val app=context as SosoApplication
     private val automation=InstrumentationRegistry.getInstrumentation().uiAutomation
     private fun shell(command:String):String=android.os.ParcelFileDescriptor.AutoCloseInputStream(automation.executeShellCommand(command)).bufferedReader().use{it.readText()}
+    private fun dismissEmulatorSystemAnr(device:UiDevice){
+        // Recover only known emulator infrastructure. Never dismiss an auditor/fixture ANR.
+        if(device.hasObject(By.textContains("System UI isn't responding")) || device.hasObject(By.textContains("Quickstep isn't responding"))){
+            device.findObject(By.res("android","aerr_close"))?.click()
+            device.waitForIdle(5000)
+        }
+    }
     @Before fun firstRunChoosesLanguage()=runBlocking {
+        val device=UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        dismissEmulatorSystemAnr(device)
         if(!app.repo.settings.flow.first().languageChosen){
             val activity=ActivityScenario.launch(MainActivity::class.java)
             try{
-                val device=UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+                dismissEmulatorSystemAnr(device)
                 assertTrue(device.wait(Until.hasObject(By.text("选择语言 / Choose language")),10000))
                 device.takeScreenshot(File(context.getExternalFilesDir(null),"first-launch-language.png"))
                 device.findObject(By.text("English")).click()
@@ -73,6 +82,15 @@ class DeviceTest {
         assertTrue(record.analysis.filesAnalyzed.any{it.endsWith(".dex")});assertTrue(record.permissions.any{it.name=="android.permission.INTERNET"})
         assertTrue(record.riskScore in 0..100);app.repo.save(record)
         listOf("json","md","txt").forEach{val report=app.repo.export(it);assertTrue(report.length()>0);assertTrue(report.readText().contains(context.packageName))}
+        val cold=app.sososafe.mobile.data.AuditRepository(context,app.repo.db,app.repo.settings,app.repo.access)
+        assertTrue(cold.apps.first().any{it.packageName==context.packageName && it.analysis.filesAnalyzed.isNotEmpty()})
+        app.repo.settings.set("language","en")
+        val activity=ActivityScenario.launch(MainActivity::class.java)
+        try{
+            val device=UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+            assertTrue("Saved application results did not load into the UI",device.wait(Until.hasObject(By.text("Results saved")),20000))
+            device.takeScreenshot(File(context.getExternalFilesDir(null),"overview-scanned.png"))
+        }finally{activity.close()}
     }
     @Test fun importsActualApkAndPersistsSeparateRecord()=runBlocking {
         val path=context.packageManager.getApplicationInfo(context.packageName,0).sourceDir

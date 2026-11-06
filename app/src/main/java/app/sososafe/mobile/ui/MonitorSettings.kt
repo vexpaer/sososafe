@@ -71,14 +71,14 @@ import app.sososafe.mobile.platform.vpn.MonitorState
 
 @Composable internal fun NetworkScreen(records:List<ConnectionRecord>,state:MonitorState,onStart:()->Unit,onStop:()->Unit,onShell:()->Unit){
     var filter by rememberSaveable{mutableStateOf("all")}
-    val filtered=records.filter{when(filter){"dns"->it.dnsQueries.isNotEmpty();"trackers"->it.tracker;"active"->it.state=="ACTIVE" && System.currentTimeMillis()-it.lastSeen<30000;else->true}}
+    val filtered=records.filter{when(filter){"dns"->it.dnsQueries.isNotEmpty();"trackers"->it.tracker;"active"->state.running && it.state=="ACTIVE" && System.currentTimeMillis()-it.lastSeen<30000;else->true}}
     LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(horizontal=20.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
         item{Panel{
             Row(verticalAlignment=Alignment.CenterVertically){Surface(shape=RoundedCornerShape(12.dp),color=MaterialTheme.colorScheme.primaryContainer){Icon(if(state.running)Icons.Default.VpnKey else Icons.Default.VpnLock,null,Modifier.padding(12.dp).size(28.dp),tint=MaterialTheme.colorScheme.onPrimaryContainer)};Spacer(Modifier.width(14.dp));Column(Modifier.weight(1f)){Text(if(state.running)t("Monitoring","监控中")else t("Not connected","未连接"),style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.SemiBold);Text(t("Local VPN","本地 VPN"),color=MaterialTheme.colorScheme.onSurfaceVariant)}}
             if(state.running && state.status!="ACTIVE")Text(state.status,color=MaterialTheme.colorScheme.onSurfaceVariant)
             state.error?.let{Text(it,color=MaterialTheme.colorScheme.error)}
             Button(onClick=if(state.running)onStop else onStart,modifier=Modifier.fillMaxWidth().heightIn(min=50.dp)){Text(if(state.running)t("Stop monitoring","停止监控")else t("Start monitoring","开始监控"))}
-            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text("↑ ${bytes(records.sumOf{it.uploaded})}");Text("↓ ${bytes(records.sumOf{it.downloaded})}")}
+            Column(verticalArrangement=Arrangement.spacedBy(4.dp)){Text(t("Recorded traffic","已记录流量"),style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant);Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text("↑ ${bytes(records.sumOf{it.uploaded})}");Text("↓ ${bytes(records.sumOf{it.downloaded})}")}}
             if(state.unrecorded>0)Text(t("Missed records: ","遗漏记录：")+state.unrecorded,color=MaterialTheme.colorScheme.error)
         }}
         if(records.isNotEmpty()){

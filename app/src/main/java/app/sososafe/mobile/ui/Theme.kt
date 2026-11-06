@@ -41,6 +41,22 @@ fun SosoTheme(settings: UserSettings, content: @Composable () -> Unit) {
         "plum" -> Color(0xFFFFD7F2)
         else -> Color(0xFFBDEBDD)
     }
+
+    val lightOnPrimaryContainer = when (settings.color) {
+        "blue" -> Color(0xFF001A41)
+        "plum" -> Color(0xFF320A31)
+        else -> Color(0xFF002117)
+    }
+    val darkOnPrimary = when (settings.color) {
+        "blue" -> Color(0xFF1B2D55)
+        "plum" -> Color(0xFF4C214A)
+        else -> Color(0xFF00382D)
+    }
+    val darkOnPrimaryContainer = when (settings.color) {
+        "blue" -> Color(0xFFD9E2FF)
+        "plum" -> Color(0xFFFFD7F2)
+        else -> Color(0xFFD0F5E7)
+    }
     val darkContainer = when (settings.color) {
         "blue" -> Color(0xFF3B528C)
         "plum" -> Color(0xFF613A60)
@@ -72,9 +88,9 @@ fun SosoTheme(settings: UserSettings, content: @Composable () -> Unit) {
         settings.dynamic && dynamicAvailable -> if (dark) dynamicDarkColorScheme(LocalContext.current) else dynamicLightColorScheme(LocalContext.current)
         dark -> darkColorScheme(
             primary = darkPrimary,
-            onPrimary = Color(0xFF00382D),
+            onPrimary = darkOnPrimary,
             primaryContainer = darkContainer,
-            onPrimaryContainer = Color(0xFFE0F5EB),
+            onPrimaryContainer = darkOnPrimaryContainer,
             secondary = darkSecondary,
             tertiary = darkTertiary
         )
@@ -82,7 +98,7 @@ fun SosoTheme(settings: UserSettings, content: @Composable () -> Unit) {
             primary = lightPrimary,
             onPrimary = Color.White,
             primaryContainer = lightContainer,
-            onPrimaryContainer = Color(0xFF06251D),
+            onPrimaryContainer = lightOnPrimaryContainer,
             secondary = lightSecondary,
             tertiary = lightTertiary
         )

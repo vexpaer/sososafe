@@ -26,17 +26,28 @@ class MonitorVpnService:VpnService() {
     @Volatile private var underlying:Network?=null
     @Volatile private var dnsServers:List<java.net.InetAddress> = emptyList()
     @Volatile private var networkInterface:String?=null
+    private fun updateUnderlying(excluded:Network?=null){
+        val candidates=cm.allNetworks.filter{it!=excluded && cm.getNetworkCapabilities(it)?.let{c->c.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)&&c.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)}==true}
+        val selected=cm.activeNetwork?.takeIf{it in candidates} ?: candidates.maxByOrNull{network->val c=cm.getNetworkCapabilities(network);(if(c?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)==true)100 else 0)+(if(c?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)==true)10 else 0)+when{c?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)==true->4;c?.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)==true->3;else->2}}
+        val properties=selected?.let{cm.getLinkProperties(it)}
+        val resolvers=properties?.dnsServers.orEmpty().filter{!it.isAnyLocalAddress&&!it.isLoopbackAddress}
+        val changed=underlying!=selected
+        if(changed || dnsServers!=resolvers)proxy?.resetUpstreams()
+        underlying=selected;dnsServers=resolvers;networkInterface=properties?.interfaceName
+        if(changed)setUnderlyingNetworks(selected?.let{arrayOf(it)})
+        if(monitoring && currentSession==session)state.value=state.value.copy(status=when{selected==null->"WAITING_FOR_NETWORK";resolvers.isEmpty()->"WAITING_FOR_DNS";else->"ACTIVE"})
+    }
     private val callback=object:ConnectivityManager.NetworkCallback(){
         override fun onAvailable(network:Network){
             if(disposed)return
-            if(underlying!=network){underlying=network;dnsServers=emptyList();networkInterface=null;proxy?.resetUpstreams()}
-            setUnderlyingNetworks(arrayOf(network));if(monitoring && currentSession==session)state.value=state.value.copy(status="UPDATING_NETWORK · apps may reconnect")
+            updateUnderlying()
         }
+        override fun onCapabilitiesChanged(network:Network,capabilities:NetworkCapabilities){if(!disposed)updateUnderlying()}
         override fun onLinkPropertiesChanged(network:Network,properties:LinkProperties){
             if(disposed)return
             if(underlying==network){val next=properties.dnsServers.filter{!it.isAnyLocalAddress&&!it.isLoopbackAddress};networkInterface=properties.interfaceName;if(next!=dnsServers){dnsServers=next;proxy?.resetUpstreams()};if(monitoring && currentSession==session)state.value=state.value.copy(status=if(next.isEmpty())"WAITING_FOR_DNS"else "ACTIVE")}
         }
-        override fun onLost(network:Network){if(!disposed && underlying==network){underlying=null;dnsServers=emptyList();networkInterface=null;proxy?.resetUpstreams();setUnderlyingNetworks(null);if(currentSession==session)state.value=state.value.copy(status="WAITING_FOR_NETWORK · apps may reconnect")}}
+        override fun onLost(network:Network){if(!disposed)updateUnderlying(network)}
     }
     override fun onStartCommand(intent:Intent?,flags:Int,startId:Int):Int {
         if(intent?.action==STOP){stopMonitor();return START_NOT_STICKY}
@@ -50,10 +61,11 @@ class MonitorVpnService:VpnService() {
             val open=PendingIntent.getActivity(this,1,Intent(this,MainActivity::class.java),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
             val n=NotificationCompat.Builder(this,"monitor").setSmallIcon(R.drawable.ic_shield).setContentTitle(getString(R.string.monitor_title)).setContentText(getString(R.string.monitor_body)).setContentIntent(open).setOngoing(true).addAction(0,getString(R.string.stop),stop).build()
             startForeground(17,n)
-            underlying=cm.activeNetwork?.takeIf{cm.getNetworkCapabilities(it)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)==true} ?: cm.allNetworks.firstOrNull{cm.getNetworkCapabilities(it)?.let{c->c.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)&&c.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)}==true}
-            underlying?.let{cm.getLinkProperties(it)}?.let{dnsServers=it.dnsServers.filter{a->!a.isAnyLocalAddress&&!a.isLoopbackAddress};networkInterface=it.interfaceName}
-            // This app is excluded from its own VPN, so its default is the physical network.
-            cm.registerDefaultNetworkCallback(callback,android.os.Handler(mainLooper))
+            updateUnderlying()
+            // Default callbacks can report the VPN even for an excluded app on some Android builds.
+            // Observe only physical Internet networks; never bind an upstream to our own TUN.
+            val physical=NetworkRequest.Builder().addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN).build()
+            cm.registerNetworkCallback(physical,callback,android.os.Handler(mainLooper))
             val user=UUID.randomUUID().toString();val pass=UUID.randomUUID().toString()
             fun tcp(s:Socket){check(protect(s)){"Cannot protect relay socket"};underlying?.bindSocket(s)}
             fun udp(s:DatagramSocket){check(protect(s)){"Cannot protect UDP relay"};underlying?.bindSocket(s)}

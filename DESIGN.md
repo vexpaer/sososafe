@@ -9,3 +9,19 @@ Use Material type roles, generous section spacing and compact evidence rows. Tab
 The updated brief pins FlClash as a visual reference: quiet Material You surfaces, 16 dp rounded groups, fine neutral outlines, generous space and restrained accent color. Page titles replace the top-left product wordmark. Summary cards contain real audit state, never promotional slogans. Keep the five destinations; move lengthy explanations into explicit information dialogs and retain consequential authorization and rollback disclosures.
 
 First launch asks for 中文 or English in a focused dialog. Language is persisted atomically and can be changed at the top of Appearance settings. No locale-dependent feature disappears. Readme direction: short product statement, download first, actual screenshots, a compact feature list, then links to deeper technical documentation. References: FlClash UI; VS Code and Ollama readme information hierarchy. No reference artwork or GPL code is copied.
+
+## Forensic Minimalism — UI refresh
+
+The mobile interface follows a restrained Material 3 Expressive visual language.
+
+- Use neutral page and container surfaces; reserve accent colors for navigation, primary actions, and selected states.
+- Keep lists flat. Use dividers and spacing for hierarchy; cards are reserved for genuinely independent summaries.
+- Do not show a device-wide security score derived from an average of per-app scores. Show review counts and evidence instead.
+- Label evidence by what was observed: static references, declared capabilities, granted permissions, and observed connection metadata remain distinct.
+- Risk color always accompanies a textual severity label.
+- Dynamic color and user-selected accent are mutually exclusive controls. On Android versions without dynamic color, expose the manual accent.
+- On wide windows, application selection uses a list-detail layout; compact windows use a single-pane navigation flow.
+- Keep explanatory copy behind explicit information affordances. Do not add helper text that repeats a control label or its obvious effect.
+- Preserve the five primary destinations: Overview, Apps, Network, Actions, Settings.
+
+The design is reviewed against the repository's Android emulator screenshots for light mode, dark mode, large text, application detail, and wide-window layouts.

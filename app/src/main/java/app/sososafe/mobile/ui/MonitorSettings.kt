@@ -117,7 +117,7 @@ import app.sososafe.mobile.platform.vpn.MonitorState
                     c.attribution+" · UID "+(c.uid?.toString() ?: "?")+"\n"+
                     c.provider+" · "+c.category+"\n"+
                     (c.domainEvidence ?: "IP metadata")+"\n"+
-                    c.packets+" packets · "+c.connections+" connections\n"+
+                    c.packets.toString()+" packets · "+c.connections+" connections\n"+
                     date(c.firstSeen)+" → "+date(c.lastSeen)+
                     if(c.dnsQueries.isEmpty()) "" else "\nDNS: "+c.dnsQueries.joinToString(),
                     style=MaterialTheme.typography.bodySmall,

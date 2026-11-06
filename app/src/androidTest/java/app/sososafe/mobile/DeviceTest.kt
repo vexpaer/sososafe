@@ -125,8 +125,15 @@ class DeviceTest {
             var result=""
             withTimeout(20000){while(!result.contains("\"done\":true")){delay(300);result=shell("cat /sdcard/Android/data/app.sososafe.fixture/files/result.json")}}
             val values=org.json.JSONObject(result);assertFalse(result,values.has("error"));assertEquals("soso-tcp",values.getString("tcp"));assertEquals("soso-udp",values.getString("udp"))
-            withTimeout(10000){while(app.repo.dao.allConnections().none{ReportWriter.json.decodeFromString<ConnectionRecord>(it.json).remotePort==18080})delay(500)}
-            val records=app.repo.dao.allConnections().map{ReportWriter.json.decodeFromString<ConnectionRecord>(it.json)}
+            // Metadata is written in batches. Wait for DNS and owner lookup too, not just
+            // the older TCP row, which may have been persisted before the final DNS packet.
+            var records=emptyList<ConnectionRecord>()
+            val peerUid=context.packageManager.getApplicationInfo("app.sososafe.fixture",0).uid
+            withTimeout(10000){while(true){
+                records=app.repo.dao.allConnections().map{ReportWriter.json.decodeFromString<ConnectionRecord>(it.json)}
+                if(records.any{it.remotePort==18080} && records.any{it.remotePort==18081} && records.any{"sososafe-ci.invalid" in it.dnsQueries} && (android.os.Build.VERSION.SDK_INT<29 || records.any{it.remotePort==18081 && it.uid==peerUid}))break
+                delay(200)
+            }}
             assertTrue(records.any{it.protocol=="TCP" && it.uploaded>0 && it.downloaded>0})
             assertTrue(records.any{it.protocol=="UDP" && it.remotePort==18081})
             assertTrue(records.any{"sososafe-ci.invalid" in it.dnsQueries})
@@ -137,6 +144,7 @@ class DeviceTest {
         } finally {
             context.startService(Intent(context,MonitorVpnService::class.java).setAction(MonitorVpnService.STOP))
             withTimeout(10000){while(MonitorVpnService.state.value.running)delay(100)}
+            File(context.getExternalFilesDir(null),"vpn-observed.json").writeText(ReportWriter.json.encodeToString(app.repo.dao.allConnections().map{ReportWriter.json.decodeFromString<ConnectionRecord>(it.json)}))
             activity.close()
         }
     }

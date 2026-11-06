@@ -36,9 +36,11 @@ capture_tab() {
     adb exec-out screencap -p > "artifacts/screens/$name.png"
 }
 capture_tab 30 apps
-adb shell input tap "$((width / 2))" "$((height * 28 / 100))"
+adb shell input tap "$((width / 2))" "$((height * 37 / 100))"
 sleep 1
 adb exec-out screencap -p > artifacts/screens/app-detail.png
+adb shell input keyevent KEYCODE_BACK
+sleep 1
 capture_tab 50 network
 capture_tab 70 actions
 capture_tab 90 settings

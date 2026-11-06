@@ -64,7 +64,8 @@ class MonitorVpnService:VpnService() {
                     java.net.Inet6Address.getByAddress(null,resolved.address,java.net.NetworkInterface.getByName(checkNotNull(networkInterface)))
                 }else resolved
             }
-            proxy=LocalSocksProxy(user,pass,::tcp,::udp,::route){e->if(BuildConfig.DEBUG)android.util.Log.w("SosoRelay",e.javaClass.simpleName)}
+            val testDiagnostics=BuildConfig.DEBUG && intent?.getBooleanExtra("testDiagnostics",false)==true
+            proxy=LocalSocksProxy(user,pass,::tcp,::udp,::route){e->if(testDiagnostics)android.util.Log.w("SosoRelay",e.stackTraceToString())}
             val builder=Builder().setSession("sososafe · local metadata monitor").setMtu(1500).addAddress("10.82.0.1",32).addAddress("fd82:5afe::1",128).addRoute("0.0.0.0",0).addRoute("::",0).addDisallowedApplication(packageName).setBlocking(false)
             check(dnsServers.isNotEmpty()){ "No network DNS resolver available. Connect to Wi-Fi or mobile data and retry." }
             // A virtual DNS destination follows the current physical resolver after network changes.

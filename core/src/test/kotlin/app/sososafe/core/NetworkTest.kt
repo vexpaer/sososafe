@@ -53,7 +53,7 @@ class NetworkTest {
             val pool=Executors.newSingleThreadExecutor();val protected=AtomicInteger()
             ServerSocket(0,1,InetAddress.getByName(host)).use{echo->
                 val task=pool.submit{echo.accept().use{s->val b=ByteArray(5);DataInputStream(s.getInputStream()).readFully(b);s.getOutputStream().write(b)}}
-                LocalSocksProxy("u","p",{protected.incrementAndGet()}).use{proxy->auth(proxy).use{s->
+                LocalSocksProxy("u","p",{assertTrue(it.isBound);assertFalse(it.isConnected);protected.incrementAndGet()}).use{proxy->auth(proxy).use{s->
                     val out=DataOutputStream(s.getOutputStream());val input=DataInputStream(s.getInputStream());val address=InetAddress.getByName(host).address
                     out.write(byteArrayOf(5,1,0,if(address.size==4)1 else 4));out.write(address);out.writeShort(echo.localPort);assertEquals(5,input.readUnsignedByte());assertEquals(0,input.readUnsignedByte());ByteArray(8).also{input.readFully(it)}
                     out.writeBytes("hello");out.flush();val result=ByteArray(5);input.readFully(result);assertEquals("hello",result.toString(Charsets.UTF_8));assertEquals(1,protected.get())
@@ -67,7 +67,7 @@ class NetworkTest {
             val pool=Executors.newSingleThreadExecutor();val protected=AtomicInteger()
             DatagramSocket(InetSocketAddress(host,0)).use{echo->echo.soTimeout=5000
                 val task=pool.submit{val b=ByteArray(100);val p=DatagramPacket(b,b.size);echo.receive(p);echo.send(p)}
-                LocalSocksProxy("u","p",protectUdp={protected.incrementAndGet()}).use{proxy->auth(proxy).use{control->
+                LocalSocksProxy("u","p",protectUdp={assertTrue(it.isBound);assertFalse(it.isConnected);protected.incrementAndGet()}).use{proxy->auth(proxy).use{control->
                     val out=DataOutputStream(control.getOutputStream());val input=DataInputStream(control.getInputStream());out.write(byteArrayOf(5,3,0,1,0,0,0,0,0,0))
                     assertEquals(5,input.readUnsignedByte());assertEquals(0,input.readUnsignedByte());ByteArray(6).also{input.readFully(it)};val relayPort=input.readUnsignedShort()
                     DatagramSocket().use{client->client.soTimeout=5000;val bytes=ByteArrayOutputStream();val d=DataOutputStream(bytes);d.writeShort(0);d.writeByte(0);val addr=InetAddress.getByName(host).address;d.writeByte(if(addr.size==4)1 else 4);d.write(addr);d.writeShort(echo.localPort);d.writeBytes("echo")

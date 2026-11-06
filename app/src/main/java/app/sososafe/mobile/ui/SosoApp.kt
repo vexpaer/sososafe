@@ -178,15 +178,14 @@ private fun openSettings(context:android.content.Context,pkg:String){context.sta
                 0->{
                     item{Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text(t("Review priority","检查优先级"),style=MaterialTheme.typography.titleLarge);Risk(app.riskScore)}}
                     item{Fact(t("Package","包名"),app.packageName);Fact(t("Version / UID / Target SDK","版本 / UID / 目标 SDK"),"${app.version} / ${app.uid} / ${app.targetSdk}");Fact(t("Source / Scan","来源 / 扫描"),"${app.installer ?: "Unknown"} · ${app.mode} · ${date(app.scannedAt)}");Fact(t("System / Enabled / Shared UID","系统 / 启用 / 共享 UID"),"${app.system} / ${app.enabled} / ${app.sharedUid ?: "—"}")}
-                    item{Fact(t("Score contributions after caps","分项计分（封顶后）"),app.scoreComponents.entries.joinToString("\n"){"${it.key}: ${it.value}"});Section(t("Coverage & access limits","覆盖范围与访问限制"))}
-                    items(app.limitations+app.analysis.limitations){Text(it,style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)}
-                    item{Fact(t("Analyzed files","已分析文件"),app.analysis.filesAnalyzed.joinToString("\n").ifEmpty{t("None. APK analysis not performed.","无，尚未进行 APK 分析。")})}
-                    item{Section(t("Data exposure correlations","数据暴露关联"),t("Coexistence is not proof of disclosure.","共存关系不代表已证实泄露。"))}
+                    item{MoreInfo(t("Score & coverage","计分与分析范围"),t("Score contributions:\n","分项计分：\n")+app.scoreComponents.entries.joinToString("\n"){"${it.key}: ${it.value}"}+"\n\n"+(app.limitations+app.analysis.limitations).joinToString("\n\n"))}
+                    item{MoreInfo(t("Analyzed files","已分析文件"),app.analysis.filesAnalyzed.joinToString("\n").ifEmpty{t("No readable APK analyzed.","尚未分析可读 APK。")})}
+                    item{Section(t("Data exposure correlations","数据暴露关联"))}
                     if(app.exposures.isEmpty())item{Text(t("No capability / endpoint pairs were found within this scan's coverage.","本次扫描范围内未发现可关联的权限与端点。"))}
-                    items(app.exposures.take(200)){link->Fact("${link.dataType} → ${link.provider}","${link.permission}\n${link.host}\n${link.level}\n${link.explanation}")}
+                    items(app.exposures.take(200)){link->Fact("${link.dataType} → ${link.provider}","${link.host}\n${link.permission}\n${link.severity} · ${link.level}")}
                 }
                 1->{
-                    item{Text(t("Declared, granted, AppOps and special access are separate facts. Unknown does not mean denied.","声明、实际授予、AppOps 与特殊权限分别记录；未知不代表拒绝。"))}
+                    item{MoreInfo(t("Permission states","权限状态"),t("Declared, granted, AppOps and special access are separate facts. Unknown does not mean denied.","声明、实际授予、AppOps 与特殊权限分别记录；未知不代表拒绝。"))}
                     if(app.permissions.isEmpty())item{Text(t("No permission information available.","暂无可用权限信息。"))}
                     items(app.permissions){p->OutlinedCard(Modifier.fillMaxWidth()){Column(Modifier.padding(12.dp)){Text(p.group,style=MaterialTheme.typography.titleMedium);SelectionContainer{Text(p.name,style=MaterialTheme.typography.bodyMedium)};Text("${p.protection}\nDeclared=${p.declared} · Granted=${p.granted ?: "Unknown"}\nAppOps=${p.appOp ?: "Unknown"}\nSpecial=${p.specialState ?: "—"}\n${p.evidence}",style=MaterialTheme.typography.bodySmall)}}}
                     app.appOps?.let{item{Section("AppOps");SelectionContainer{Text(it,style=MaterialTheme.typography.bodySmall)}}}
@@ -207,7 +206,6 @@ private fun openSettings(context:android.content.Context,pkg:String){context.sta
                 }
                 5->{val findings=app.findings.filter{it.id.startsWith("dex:")};if(findings.isEmpty())item{Text(t("No supported code features found within analyzed DEX files.","已分析的 DEX 文件中未发现规则覆盖的代码特征。"))};items(findings){FindingRow(it)}}
                 6->{
-                    item{Text(t("All changes require confirmation. Android settings are available in every mode; AppOps and disabling require Root or Shizuku.","所有修改均需确认。各模式均可打开 Android 设置；AppOps 和停用操作需要 Root 或 Shizuku。"))}
                     items(app.findings){FindingRow(it)}
                     if(!app.imported){
                         item{val context=LocalContext.current;Button(onClick={openSettings(context,app.packageName)}){Text(t("Open app / permissions settings","打开应用 / 权限设置"))}}

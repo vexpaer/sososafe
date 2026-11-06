@@ -115,7 +115,7 @@ class DeviceTest {
             device.findObject(By.res("android","button1"))?.click()
         }
         withTimeout(15000){while(VpnService.prepare(context)!=null)delay(100)}
-        context.startForegroundService(Intent(context,MonitorVpnService::class.java))
+        context.startForegroundService(Intent(context,MonitorVpnService::class.java).putExtra("testDiagnostics",true))
         try {
             withTimeout(15000){while(!MonitorVpnService.state.value.running){MonitorVpnService.state.value.error?.let{error(it)};delay(100)}}
             delay(1000)

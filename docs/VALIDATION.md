@@ -10,12 +10,12 @@ The release workflow requires a successful **Android CI run for the exact source
 |---|---|
 | JVM unit tests | 52 tests; permission states, Manifest/AXML, DEX, domain boundaries, scoring, reports, authorization, command allowlist, rollback, socket ownership, DNS and IPv4/IPv6 TCP/UDP relay |
 | Verification guard | 3 tests; zero, skipped or failed instrumentation must fail CI |
-| Android 8 / API 26 | 6 actual instrumentation tests |
-| Android 15 / API 35 | 6 actual instrumentation tests |
-| Android 16 / API 36 | 6 actual instrumentation tests |
+| Android 8 / API 26 | 7 actual instrumentation tests |
+| Android 15 / API 35 | 7 actual instrumentation tests |
+| Android 16 / API 36 | 7 actual instrumentation tests |
 | Android Lint | No errors; dependency update and style advisories remain visible |
 
-The six device tests verify:
+The seven device tests verify:
 
 1. Real PackageManager metadata and installed APK analysis, report export, persisted result hydration and result display.
 2. Import of an actual APK with a separate record and unknown installed authorization state.
@@ -23,6 +23,8 @@ The six device tests verify:
 4. Room v1 → v2 migration of a Unicode report larger than 2 MiB without oversized cursor rows.
 5. First-run language selection, Chinese/English setting changes and persistence across Activity recreation.
 6. A **separate application UID** sends TCP and UDP through the real VPN to runner-local echo servers. Both echoes, upload/download metadata, the fixture DNS query, Android 10+ owner UID and VPN stop must pass. Tests wait for batched database writes; they do not substitute shell traffic, which may bypass the VPN.
+
+7. Expanded-window application navigation keeps the inventory and selected application detail visible together at a 1600 × 2560 px / 240 dpi emulator configuration. The test saves `tablet-list-detail.png`.
 
 ## Evidence artifacts
 

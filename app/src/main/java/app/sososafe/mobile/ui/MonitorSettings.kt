@@ -3,6 +3,7 @@ package app.sososafe.mobile.ui
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -36,8 +37,8 @@ import app.sososafe.mobile.platform.vpn.MonitorState
             Choice(t("Language","界面语言"),s.language,listOf("zh" to "中文","en" to "English")){vm.set("language",it)}
             HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant)
             Choice(t("Theme","主题"),s.theme,listOf("system" to t("System","跟随系统"),"light" to t("Light","浅色"),"dark" to t("Dark","深色"))){vm.set("theme",it)}
-            Toggle(t("Dynamic color","动态取色"),s.dynamic){vm.set("dynamic",it)}
-            Choice(t("Accent","主题色"),s.color,listOf("teal" to t("Teal","青绿"),"blue" to t("Blue","蓝色"),"plum" to t("Plum","紫色"))){vm.accent(it)}
+            if(android.os.Build.VERSION.SDK_INT>=31) Toggle(t("Dynamic color","动态取色"),s.dynamic){vm.set("dynamic",it)}
+            if(!s.dynamic || android.os.Build.VERSION.SDK_INT<31) Choice(t("Accent","主题色"),s.color,listOf("teal" to t("Teal","青绿"),"blue" to t("Blue","蓝色"),"plum" to t("Plum","紫色"))){vm.accent(it)}
         }}
         item{Section(t("Device access","设备访问"))}
         item{Panel{
@@ -70,14 +71,14 @@ import app.sososafe.mobile.platform.vpn.MonitorState
 
 @Composable internal fun NetworkScreen(records:List<ConnectionRecord>,state:MonitorState,onStart:()->Unit,onStop:()->Unit,onShell:()->Unit){
     var filter by rememberSaveable{mutableStateOf("all")}
-    val filtered=records.filter{when(filter){"dns"->it.dnsQueries.isNotEmpty();"trackers"->it.tracker;"active"->it.state=="ACTIVE" && System.currentTimeMillis()-it.lastSeen<30000;else->true}}
+    val filtered=records.filter{when(filter){"dns"->it.dnsQueries.isNotEmpty();"trackers"->it.tracker;"active"->state.running && it.state=="ACTIVE" && System.currentTimeMillis()-it.lastSeen<30000;else->true}}
     LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(horizontal=20.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
         item{Panel{
             Row(verticalAlignment=Alignment.CenterVertically){Surface(shape=RoundedCornerShape(12.dp),color=MaterialTheme.colorScheme.primaryContainer){Icon(if(state.running)Icons.Default.VpnKey else Icons.Default.VpnLock,null,Modifier.padding(12.dp).size(28.dp),tint=MaterialTheme.colorScheme.onPrimaryContainer)};Spacer(Modifier.width(14.dp));Column(Modifier.weight(1f)){Text(if(state.running)t("Monitoring","监控中")else t("Not connected","未连接"),style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.SemiBold);Text(t("Local VPN","本地 VPN"),color=MaterialTheme.colorScheme.onSurfaceVariant)}}
             if(state.running && state.status!="ACTIVE")Text(state.status,color=MaterialTheme.colorScheme.onSurfaceVariant)
             state.error?.let{Text(it,color=MaterialTheme.colorScheme.error)}
             Button(onClick=if(state.running)onStop else onStart,modifier=Modifier.fillMaxWidth().heightIn(min=50.dp)){Text(if(state.running)t("Stop monitoring","停止监控")else t("Start monitoring","开始监控"))}
-            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text("↑ ${bytes(records.sumOf{it.uploaded})}");Text("↓ ${bytes(records.sumOf{it.downloaded})}")}
+            Column(verticalArrangement=Arrangement.spacedBy(4.dp)){Text(t("Recorded traffic","已记录流量"),style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant);Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text("↑ ${bytes(records.sumOf{it.uploaded})}");Text("↓ ${bytes(records.sumOf{it.downloaded})}")}}
             if(state.unrecorded>0)Text(t("Missed records: ","遗漏记录：")+state.unrecorded,color=MaterialTheme.colorScheme.error)
         }}
         if(records.isNotEmpty()){
@@ -95,12 +96,36 @@ import app.sososafe.mobile.platform.vpn.MonitorState
 
 @Composable private fun ConnectionCard(c:ConnectionRecord){
     var expanded by rememberSaveable(c.id){mutableStateOf(false)}
-    Surface(onClick={expanded=!expanded},shape=RoundedCornerShape(16.dp),color=MaterialTheme.colorScheme.surfaceContainerLow,border=BorderStroke(0.75.dp,MaterialTheme.colorScheme.outlineVariant)){
-        Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
-            Row(verticalAlignment=Alignment.CenterVertically){Text(c.domain ?: c.remoteIp,Modifier.weight(1f),style=MaterialTheme.typography.titleMedium,maxLines=2,overflow=TextOverflow.Ellipsis);Icon(if(expanded)Icons.Default.ExpandLess else Icons.Default.ExpandMore,null)}
-            Text(c.packages.joinToString().ifBlank{c.uid?.let{"UID $it"} ?: t("Unknown application","应用未知")},style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
-            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text("${c.protocol} · ${c.remotePort}",style=MaterialTheme.typography.labelLarge,color=if(c.tracker)MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary);Text("↑ ${bytes(c.uploaded)}   ↓ ${bytes(c.downloaded)}",style=MaterialTheme.typography.bodyMedium)}
-            if(expanded){HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant);SelectionContainer{Text("${c.localIp}:${c.localPort} → ${c.remoteIp}:${c.remotePort}\n${c.attribution} · UID ${c.uid ?: "?"}\n${c.provider} · ${c.category}\n${c.domainEvidence ?: "IP metadata"}\n${c.packets} packets · ${c.connections} connections\n${date(c.firstSeen)} → ${date(c.lastSeen)}"+if(c.dnsQueries.isEmpty())""else "\nDNS: ${c.dnsQueries.joinToString()}",style=MaterialTheme.typography.bodyMedium)}}
+    Column(
+        Modifier.fillMaxWidth().animateContentSize().clickable{expanded=!expanded}.padding(vertical=11.dp),
+        verticalArrangement=Arrangement.spacedBy(5.dp)
+    ){
+        Row(verticalAlignment=Alignment.CenterVertically){
+            Text(c.domain ?: c.remoteIp,Modifier.weight(1f),style=MaterialTheme.typography.bodyLarge,fontWeight=FontWeight.Medium,maxLines=1,overflow=TextOverflow.Ellipsis)
+            if(c.tracker) Text(t("Tracker","追踪器"),style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.error)
+            Icon(if(expanded)Icons.Default.ExpandLess else Icons.Default.ExpandMore,null,Modifier.padding(start=5.dp).size(18.dp),tint=MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Text(c.packages.joinToString().ifBlank{c.uid?.let{"UID $it"} ?: t("Unknown application","应用未知")},style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant,maxLines=1,overflow=TextOverflow.Ellipsis)
+        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
+            Text(c.protocol+" · "+c.remotePort,Modifier.weight(1f),style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.primary)
+            Text("↑ "+bytes(c.uploaded)+"   ↓ "+bytes(c.downloaded),style=MaterialTheme.typography.labelMedium)
+        }
+        if(expanded){
+            HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant)
+            SelectionContainer{
+                Text(
+                    c.localIp+":"+c.localPort+" → "+c.remoteIp+":"+c.remotePort+"\n"+
+                    c.attribution+" · UID "+(c.uid?.toString() ?: "?")+"\n"+
+                    c.provider+" · "+c.category+"\n"+
+                    (c.domainEvidence ?: "IP metadata")+"\n"+
+                    c.packets.toString()+" packets · "+c.connections+" connections\n"+
+                    date(c.firstSeen)+" → "+date(c.lastSeen)+
+                    if(c.dnsQueries.isEmpty()) "" else "\nDNS: "+c.dnsQueries.joinToString(),
+                    style=MaterialTheme.typography.bodySmall,
+                    color=MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
+    HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant.copy(alpha=0.65f))
 }

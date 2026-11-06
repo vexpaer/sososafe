@@ -89,7 +89,7 @@ class DeviceTest {
         val activity=ActivityScenario.launch(MainActivity::class.java)
         try{
             val device=UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-            assertTrue("Saved application results did not load into the UI",device.wait(Until.hasObject(By.text("Results saved")),20000))
+            assertTrue("Saved application results did not load into the UI",device.wait(Until.hasObject(By.text("Audit available")),20000))
             device.takeScreenshot(File(context.getExternalFilesDir(null),"overview-scanned.png"))
         }finally{activity.close()}
     }
@@ -167,4 +167,35 @@ class DeviceTest {
             activity.close()
         }
     }
+
+    @Test fun expandedWindowUsesApplicationListDetail() = runBlocking<Unit> {
+        app.repo.settings.set("language", "en")
+        val scanner = PackageScanner(context, app.repo.access, ScanMode.STANDARD)
+        val inventory = scanner.inventory()
+        val self = inventory.first { it.name == context.packageName }
+        app.repo.save(scanner.scan(self, true))
+
+        shell("wm size 1600x2560")
+        shell("wm density 240")
+        try {
+            val activity = ActivityScenario.launch(MainActivity::class.java)
+            try {
+                val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+                assertTrue("Expanded navigation rail did not appear", device.wait(Until.hasObject(By.text("Apps")), 10000))
+                device.findObject(By.text("Apps")).click()
+                assertTrue("Application inventory did not load", device.wait(Until.hasObject(By.text(context.packageName)), 15000))
+                device.findObject(By.text(context.packageName)).click()
+                assertTrue("Application detail pane did not appear", device.wait(Until.hasObject(By.text("Permissions")), 10000))
+                assertTrue("Application list disappeared in expanded layout", device.hasObject(By.text("Applications")))
+                device.waitForIdle(1000)
+                device.takeScreenshot(File(context.getExternalFilesDir(null), "tablet-list-detail.png"))
+            } finally {
+                activity.close()
+            }
+        } finally {
+            shell("wm size reset")
+            shell("wm density reset")
+        }
+    }
+
 }

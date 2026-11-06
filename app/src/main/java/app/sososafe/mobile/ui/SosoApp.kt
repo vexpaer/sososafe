@@ -10,6 +10,7 @@ import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -27,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -83,7 +85,7 @@ internal fun bytes(value:Long):String=when {value>=1024L*1024*1024->"%.2f GiB".f
         BoxWithConstraints(Modifier.fillMaxSize()){
             val expanded=maxWidth>=840.dp
             Scaffold(
-                topBar={TopAppBar(title={Text(if(selectedApp!=null)selectedApp.label else t(destinations[tab].en,destinations[tab].zh),fontWeight=FontWeight.SemiBold,maxLines=1,overflow=TextOverflow.Ellipsis)},colors=TopAppBarDefaults.topAppBarColors(containerColor=MaterialTheme.colorScheme.background),navigationIcon={if(selectedApp!=null)IconButton(onClick={selected=null}){Icon(Icons.AutoMirrored.Filled.ArrowBack,t("Back","返回"))}},actions={
+                topBar={TopAppBar(title={Text(if(selectedApp!=null && !expanded)selectedApp.label else t(destinations[tab].en,destinations[tab].zh),fontWeight=FontWeight.SemiBold,maxLines=1,overflow=TextOverflow.Ellipsis)},colors=TopAppBarDefaults.topAppBarColors(containerColor=MaterialTheme.colorScheme.background),navigationIcon={if(selectedApp!=null && !expanded)IconButton(onClick={selected=null}){Icon(Icons.AutoMirrored.Filled.ArrowBack,t("Back","返回"))}},actions={
                     if(tab==1 && selectedApp==null)IconButton(onClick={picker.launch(arrayOf("application/vnd.android.package-archive","application/octet-stream","application/zip"))},enabled=!busy){Icon(Icons.Default.FileOpen,t("Import APK","导入 APK"))}
                     if(selectedApp!=null)IconButton(onClick={openSettings(context,selectedApp.packageName)},enabled=!selectedApp.imported){Icon(Icons.Default.OpenInNew,t("App details","应用详情"))}
                 })},
@@ -95,9 +97,22 @@ internal fun bytes(value:Long):String=when {value>=1024L*1024*1024->"%.2f GiB".f
                     Column(Modifier.weight(1f).fillMaxHeight()){
                         if(busy)LinearProgressIndicator(Modifier.fillMaxWidth())
                         if(progress.status=="IMPORTING")Row(Modifier.fillMaxWidth().padding(horizontal=20.dp),verticalAlignment=Alignment.CenterVertically){Text(t("Analyzing imported APK…","正在分析导入的 APK…"),Modifier.weight(1f));TextButton(onClick=vm::cancel){Text(t("Cancel","取消"))}}
-                        if(selectedApp!=null) AppDetail(selectedApp,connections,vm)
+                        if(expanded && tab==1 && selectedApp!=null) {
+                            Row(Modifier.fillMaxSize()) {
+                                Applications(
+                                    apps,
+                                    onSelect={selected=it.packageName},
+                                    onScan=vm::scan,
+                                    onImport={picker.launch(arrayOf("application/vnd.android.package-archive","application/octet-stream","application/zip"))},
+                                    selectedPackage=selected,
+                                    modifier=Modifier.weight(0.42f).fillMaxHeight()
+                                )
+                                VerticalDivider(color=MaterialTheme.colorScheme.outlineVariant)
+                                AppDetail(selectedApp,connections,vm,modifier=Modifier.weight(0.58f).fillMaxHeight())
+                            }
+                        } else if(selectedApp!=null) AppDetail(selectedApp,connections,vm)
                         else when(tab){
-                            0->Dashboard(apps,scans,progress,privilege,settings.mode,vm,onApps={tab=1},onSettings={tab=4})
+                            0->Dashboard(apps,scans,progress,privilege,settings.mode,vm,onApps={tab=1},onSettings={tab=4},onApp={selected=it.packageName})
                             1->Applications(apps,onSelect={selected=it.packageName},onScan=vm::scan,onImport={picker.launch(arrayOf("application/vnd.android.package-archive","application/octet-stream","application/zip"))})
                             2->NetworkScreen(connections,monitor,onStart={vpnDialog=true},onStop={context.startService(Intent(context,MonitorVpnService::class.java).setAction(MonitorVpnService.STOP))},onShell=vm::shellNetwork)
                             3->ActionsScreen(apps,actions,onApp={selected=it.packageName},onRollback={rollback=it})
@@ -122,114 +137,479 @@ private fun kotlinx.coroutines.CoroutineScope.launchSafe(vm:AuditViewModel,block
 private fun openSettings(context:android.content.Context,pkg:String){context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:$pkg")))}
 
 @Composable internal fun Section(title:String,subtitle:String?=null){Column(Modifier.fillMaxWidth().padding(top=16.dp,bottom=6.dp)){Text(title,style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold);if(subtitle!=null)Text(subtitle,style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)}}
-@Composable internal fun Panel(content:@Composable ColumnScope.()->Unit){Surface(Modifier.fillMaxWidth(),shape=RoundedCornerShape(16.dp),color=MaterialTheme.colorScheme.surfaceContainerLow,border=BorderStroke(0.75.dp,MaterialTheme.colorScheme.outlineVariant)){Column(Modifier.padding(18.dp),verticalArrangement=Arrangement.spacedBy(12.dp),content=content)}}
+@Composable internal fun Panel(content: @Composable ColumnScope.() -> Unit) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
+}
 @Composable internal fun modeName(mode:ScanMode?)=when(mode){ScanMode.AUTO->t("Automatic","自动");ScanMode.ROOT->"Root";ScanMode.SHIZUKU->"Shizuku";ScanMode.STANDARD->t("Standard","普通模式");else->t("Authorization required","需要授权")}
 @Composable internal fun MoreInfo(title:String,body:String){var open by remember{mutableStateOf(false)};TextButton(onClick={open=true}){Icon(Icons.Default.Info,null,Modifier.size(18.dp));Spacer(Modifier.width(8.dp));Text(title)};if(open)AlertDialog(onDismissRequest={open=false},title={Text(title)},text={Text(body,Modifier.heightIn(max=440.dp).verticalScroll(rememberScrollState()))},confirmButton={TextButton(onClick={open=false}){Text(t("Close","关闭"))}})}
 @Composable internal fun Empty(icon:ImageVector,title:String,body:String,action:String?=null,onAction:()->Unit={}){Column(Modifier.fillMaxWidth().padding(vertical=36.dp,horizontal=24.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(12.dp)){Icon(icon,null,Modifier.size(40.dp),tint=MaterialTheme.colorScheme.primary);Text(title,style=MaterialTheme.typography.titleLarge);Text(body,style=MaterialTheme.typography.bodyMedium);if(action!=null)Button(onClick=onAction){Text(action)}}}
 @Composable private fun Fact(label:String,value:String){Column(Modifier.fillMaxWidth().padding(vertical=8.dp)){Text(label,style=MaterialTheme.typography.labelLarge,color=MaterialTheme.colorScheme.onSurfaceVariant);SelectionContainer{Text(value,style=MaterialTheme.typography.bodyLarge)}}}
-@Composable private fun Risk(score:Int){val color=when{score>=60->MaterialTheme.colorScheme.error;score>=30->MaterialTheme.colorScheme.tertiary;else->MaterialTheme.colorScheme.primary};Surface(shape=MaterialTheme.shapes.small,color=color.copy(alpha=0.12f)){Text("$score / 100",Modifier.padding(horizontal=10.dp,vertical=6.dp),color=color,style=MaterialTheme.typography.labelLarge)}}
-
-@Composable private fun Dashboard(apps:List<AppRecord>,scans:List<ScanRecord>,progress:app.sososafe.mobile.data.ScanProgress,priv:app.sososafe.mobile.platform.PrivilegeState,preferred:ScanMode,vm:AuditViewModel,onApps:()->Unit,onSettings:()->Unit){
-    val mode=runCatching{ModePolicy.select(preferred,priv.rootAuthorized,priv.shizukuAuthorized)}.getOrNull()
-    LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(horizontal=20.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(16.dp)){
-        item{Panel{
-            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Surface(shape=RoundedCornerShape(12.dp),color=MaterialTheme.colorScheme.primaryContainer){Icon(Icons.Default.Shield,null,Modifier.padding(12.dp).size(28.dp),tint=MaterialTheme.colorScheme.onPrimaryContainer)};Spacer(Modifier.width(14.dp));Column(Modifier.weight(1f)){Text(t("Privacy audit","隐私审计"),style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.SemiBold);Text(if(apps.isEmpty())t("Ready to scan","准备扫描")else t("Results saved","结果已保存"),style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)};TextButton(onClick=onSettings){Text(modeName(mode));Icon(Icons.Default.ChevronRight,null,Modifier.size(18.dp))}}
-            HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant)
-            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Text(t("Security score","安全评分"),style=MaterialTheme.typography.bodyLarge);Text(if(apps.isEmpty())"—"else "${100-apps.map{it.riskScore}.average().toInt()} / 100",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Medium,color=MaterialTheme.colorScheme.primary)}
-        }}
-        item{Panel{Row(horizontalArrangement=Arrangement.spacedBy(24.dp)){Column(Modifier.weight(1f)){Fact(t("Applications","应用"),apps.size.toString());Fact(t("High / medium risk","高 / 中风险"),"${apps.count{it.risk==Severity.HIGH}} / ${apps.count{it.risk==Severity.MEDIUM}}")};Column(Modifier.weight(1f)){Fact(t("Endpoints","网络端点"),apps.flatMap{it.analysis.endpoints}.map{it.host}.distinct().size.toString());Fact(t("Tracking services","追踪服务"),apps.flatMap{it.analysis.endpoints}.filter{it.tracker}.map{it.provider+it.host}.distinct().size.toString())}}}}
-        if(progress.status=="SCANNING")item{Column(verticalArrangement=Arrangement.spacedBy(8.dp)){LinearProgressIndicator(progress={if(progress.total>0)progress.done.toFloat()/progress.total else 0f},modifier=Modifier.fillMaxWidth());Text("${progress.done} / ${progress.total} · ${progress.current}",style=MaterialTheme.typography.bodySmall);OutlinedButton(onClick=vm::cancel){Text(t("Cancel scan","取消扫描"))}}}
-        else item{Button(onClick=vm::scan,modifier=Modifier.fillMaxWidth().heightIn(min=52.dp)){Icon(Icons.Default.Search,null);Spacer(Modifier.width(8.dp));Text(t("Scan applications","扫描应用"))}}
-        if(progress.status in listOf("COMPLETED","CANCELLED","ERROR"))item{Text(when(progress.status){"COMPLETED"->t("Scan complete","扫描完成");"CANCELLED"->t("Scan cancelled","扫描已取消");else->progress.error ?: t("Scan failed. Check access in Settings.","扫描失败，请检查访问权限。")},color=if(progress.status=="ERROR")MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)}
-        if(scans.isNotEmpty())item{Text(t("Last scan · ","上次扫描 · ")+date(scans.first().startedAt),style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)}
-        if(apps.isNotEmpty())item{TextButton(onClick=onApps){Text(t("View applications","查看应用"));Icon(Icons.Default.ChevronRight,null)}}
-        item{MoreInfo(t("About evidence & scores","证据与评分"),t("Scores prioritize review; they do not certify safety. Capability, static references and observed connections are separate evidence. They do not confirm personal data disclosure. HTTPS content is not inspected.","评分用于确定检查优先级。访问能力、静态引用与实际连接分别记录，不代表已证实个人数据泄露。应用不检查 HTTPS 明文。"))}
+@Composable private fun Risk(app: AppRecord) {
+    val color = when (app.risk) {
+        Severity.HIGH -> MaterialTheme.colorScheme.error
+        Severity.MEDIUM -> MaterialTheme.colorScheme.tertiary
+        Severity.LOW -> MaterialTheme.colorScheme.primary
+        Severity.INFO -> MaterialTheme.colorScheme.secondary
     }
-}
-
-@Composable private fun Applications(apps:List<AppRecord>,onSelect:(AppRecord)->Unit,onScan:()->Unit,onImport:()->Unit){
-    var query by rememberSaveable{mutableStateOf("")};var filter by rememberSaveable{mutableStateOf("all")};var sort by rememberSaveable{mutableStateOf("risk")}
-    val filtered=remember(apps,query,filter,sort){apps.filter{(query.isBlank()||it.label.contains(query,true)||it.packageName.contains(query,true))&&when(filter){"high"->it.risk==Severity.HIGH;"medium"->it.risk==Severity.MEDIUM;"system"->it.system;"imported"->it.imported;else->true}}.let{list->when(sort){"name"->list.sortedBy{it.label.lowercase()};"endpoints"->list.sortedByDescending{it.analysis.endpoints.size};else->list.sortedByDescending{it.riskScore}}}}
-    Column(Modifier.fillMaxSize()){
-        OutlinedTextField(query,{query=it},Modifier.fillMaxWidth().padding(horizontal=16.dp),label={Text(t("Search name or package","搜索名称或包名"))},leadingIcon={Icon(Icons.Default.Search,null)},singleLine=true)
-        Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal=16.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)){
-            listOf("all" to t("All","全部"),"high" to t("High","高风险"),"medium" to t("Medium","中风险"),"system" to t("System","系统"),"imported" to t("Imported","已导入")).forEach{(key,label)->FilterChip(selected=filter==key,onClick={filter=key},label={Text(label)})}
+    val label = when (app.risk) {
+        Severity.HIGH -> t("HIGH", "高")
+        Severity.MEDIUM -> t("MEDIUM", "中")
+        Severity.LOW -> t("LOW", "低")
+        Severity.INFO -> t("INFO", "信息")
+    }
+    Surface(shape = RoundedCornerShape(8.dp), color = color.copy(alpha = 0.12f)) {
+        Row(Modifier.padding(horizontal = 9.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            Text(label, color = color, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+            Text(app.riskScore.toString(), color = color, style = MaterialTheme.typography.labelLarge)
         }
-        Row(Modifier.fillMaxWidth().padding(horizontal=16.dp),verticalAlignment=Alignment.CenterVertically){Text("${filtered.size} "+t("results","项结果"),Modifier.weight(1f),style=MaterialTheme.typography.labelLarge);Box(Modifier.width(190.dp)){Choice(t("Sort","排序"),sort,listOf("risk" to t("Risk","风险"),"name" to t("Name","名称"),"endpoints" to t("Endpoints","端点"))){sort=it}}}
-        if(apps.isEmpty())Empty(Icons.Default.Apps,t("No audit yet","暂无审计结果"),t("Scan installed applications or import an APK for offline analysis.","扫描已安装应用，或导入 APK 进行离线分析。"),t("Scan applications","扫描应用"),onScan)
-        else if(filtered.isEmpty())Empty(Icons.Default.SearchOff,t("No matching applications","没有匹配的应用"),t("Change the search or filter.","请调整搜索条件或筛选项。"))
-        LazyColumn(Modifier.weight(1f),contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){items(filtered,key={it.packageName}){app->AppRow(app,onClick={onSelect(app)})}}
-        TextButton(onClick=onImport,modifier=Modifier.align(Alignment.CenterHorizontally)){Icon(Icons.Default.FileOpen,null);Spacer(Modifier.width(8.dp));Text(t("Import APK","导入 APK"))}
     }
 }
-@Composable private fun AppRow(app:AppRecord,onClick:()->Unit){
-    val context=LocalContext.current
-    val icon by produceState<ImageBitmap?>(null,app.packageName){value=withContext(Dispatchers.IO){runCatching{context.packageManager.getApplicationIcon(app.packageName).toBitmap(96,96).asImageBitmap()}.getOrNull()}}
-    Surface(shape=RoundedCornerShape(16.dp),border=BorderStroke(0.75.dp,MaterialTheme.colorScheme.outlineVariant),color=MaterialTheme.colorScheme.surfaceContainerLow){ListItem(headlineContent={Text(app.label,maxLines=2,fontWeight=FontWeight.Medium)},supportingContent={Column{Text(app.packageName,style=MaterialTheme.typography.bodySmall,maxLines=1,overflow=TextOverflow.Ellipsis);Text("${app.analysis.endpoints.size} "+t("endpoints","个端点")+" · "+app.permissions.filter{it.group!="Other"}.map{it.group}.distinct().take(2).joinToString(),style=MaterialTheme.typography.bodySmall)}},leadingContent={if(icon!=null)Image(icon!!,null,Modifier.size(40.dp))else Icon(Icons.Default.Android,null,Modifier.size(40.dp))},trailingContent={Risk(app.riskScore)},colors=ListItemDefaults.colors(containerColor=MaterialTheme.colorScheme.surfaceContainerLow),modifier=Modifier.clickable(onClick=onClick))}
-}
+@Composable private fun Dashboard(
+    apps: List<AppRecord>,
+    scans: List<ScanRecord>,
+    progress: app.sososafe.mobile.data.ScanProgress,
+    priv: app.sososafe.mobile.platform.PrivilegeState,
+    preferred: ScanMode,
+    vm: AuditViewModel,
+    onApps: () -> Unit,
+    onSettings: () -> Unit,
+    onApp: (AppRecord) -> Unit
+) {
+    val busy by vm.busy.collectAsStateWithLifecycle()
+    val mode = runCatching { ModePolicy.select(preferred, priv.rootAuthorized, priv.shizukuAuthorized) }.getOrNull()
+    val high = apps.count { it.risk == Severity.HIGH }
+    val medium = apps.count { it.risk == Severity.MEDIUM }
+    val hosts = apps.flatMap { it.analysis.endpoints }.map { it.host }.distinct().size
+    val latest = scans.maxByOrNull { it.startedAt }?.startedAt ?: apps.maxOfOrNull { it.scannedAt }
+    val topApps = apps.filter { it.riskScore > 0 }.sortedByDescending { it.riskScore }.take(3)
+    val scanning = progress.status == "SCANNING"
+    val importing = progress.status == "IMPORTING"
+    val status = when {
+        scanning -> t("Scanning", "扫描中")
+        importing -> t("Importing APK", "正在导入 APK")
+        progress.status == "ERROR" -> t("Scan failed", "扫描失败")
+        apps.isNotEmpty() -> t("Audit available", "已有审计结果")
+        else -> t("Not scanned", "尚未扫描")
+    }
 
-@Composable private fun AppDetail(app:AppRecord,connections:List<ConnectionRecord>,vm:AuditViewModel){
-    var page by rememberSaveable(app.packageName){mutableIntStateOf(0)}
-    val titles=listOf(t("Overview","概览"),t("Permissions","权限"),t("Endpoints","端点"),t("SDKs","SDK"),t("Manifest","清单"),t("DEX","DEX"),t("Advice","建议"))
-    Column(Modifier.fillMaxSize()){
-        ScrollableTabRow(page,edgePadding=12.dp){titles.forEachIndexed{i,title->Tab(selected=page==i,onClick={page=i},text={Text(title)})}}
-        LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(20.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
-            when(page){
-                0->{
-                    item{Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text(t("Review priority","检查优先级"),style=MaterialTheme.typography.titleLarge);Risk(app.riskScore)}}
-                    item{Fact(t("Package","包名"),app.packageName);Fact(t("Version / UID / Target SDK","版本 / UID / 目标 SDK"),"${app.version} / ${app.uid} / ${app.targetSdk}");Fact(t("Source / Scan","来源 / 扫描"),"${app.installer ?: "Unknown"} · ${app.mode} · ${date(app.scannedAt)}");Fact(t("System / Enabled / Shared UID","系统 / 启用 / 共享 UID"),"${app.system} / ${app.enabled} / ${app.sharedUid ?: "—"}")}
-                    item{MoreInfo(t("Score & coverage","计分与分析范围"),t("Score contributions:\n","分项计分：\n")+app.scoreComponents.entries.joinToString("\n"){"${it.key}: ${it.value}"}+"\n\n"+(app.limitations+app.analysis.limitations).joinToString("\n\n"))}
-                    item{MoreInfo(t("Analyzed files","已分析文件"),app.analysis.filesAnalyzed.joinToString("\n").ifEmpty{t("No readable APK analyzed.","尚未分析可读 APK。")})}
-                    item{Section(t("Data exposure correlations","数据暴露关联"))}
-                    if(app.exposures.isEmpty())item{Text(t("No capability / endpoint pairs were found within this scan's coverage.","本次扫描范围内未发现可关联的权限与端点。"))}
-                    items(app.exposures.take(200)){link->Fact("${link.dataType} → ${link.provider}","${link.host}\n${link.permission}\n${link.severity} · ${link.level}")}
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp)
+    ) {
+        item {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                        Box(Modifier.size(9.dp).background(if (progress.status == "ERROR") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary, CircleShape))
+                        Text(status, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    }
+                    latest?.let { Text(date(it), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
-                1->{
-                    item{MoreInfo(t("Permission states","权限状态"),t("Declared, granted, AppOps and special access are separate facts. Unknown does not mean denied.","声明、实际授予、AppOps 与特殊权限分别记录；未知不代表拒绝。"))}
-                    if(app.permissions.isEmpty())item{Text(t("No permission information available.","暂无可用权限信息。"))}
-                    items(app.permissions){p->OutlinedCard(Modifier.fillMaxWidth()){Column(Modifier.padding(12.dp)){Text(p.group,style=MaterialTheme.typography.titleMedium);SelectionContainer{Text(p.name,style=MaterialTheme.typography.bodyMedium)};Text("${p.protection}\nDeclared=${p.declared} · Granted=${p.granted ?: "Unknown"}\nAppOps=${p.appOp ?: "Unknown"}\nSpecial=${p.specialState ?: "—"}\n${p.evidence}",style=MaterialTheme.typography.bodySmall)}}}
-                    app.appOps?.let{item{Section("AppOps");SelectionContainer{Text(it,style=MaterialTheme.typography.bodySmall)}}}
+                TextButton(onClick = onSettings) {
+                    Text(modeName(mode))
+                    Icon(Icons.Default.ChevronRight, null, Modifier.size(18.dp))
                 }
-                2->{
-                    if(app.analysis.endpoints.isEmpty())item{Empty(Icons.Default.Lan,t("No extracted endpoints","未提取到端点"),t("Check APK coverage. Encrypted or dynamically built addresses may not be visible.","请检查 APK 分析范围。加密或动态构建的地址可能不可见。"))}
-                    items(app.analysis.endpoints){ep->
-                        val observed=connections.filter{it.uid==app.uid && app.uid>=0 && (it.domain==ep.host || ep.host in it.dnsQueries)}
-                        Fact(ep.host,"${ep.value}\n${ep.provider} · ${ep.category}\n${ep.evidence.level} · ${ep.evidence.source}"+if(observed.isNotEmpty())"\nObserved UID metadata / DNS association: ${observed.size}; shared UID=${app.sharedUid!=null}; host association may be ambiguous" else "")
-                        HorizontalDivider()
+            }
+        }
+        item {
+            Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    DashboardMetric(t("Apps", "应用"), apps.size.toString(), Modifier.weight(1f))
+                    DashboardMetric(t("High", "高风险"), high.toString(), Modifier.weight(1f), "high")
+                    DashboardMetric(t("Medium", "中风险"), medium.toString(), Modifier.weight(1f), "medium")
+                    DashboardMetric(t("APK hosts", "APK 域名"), hosts.toString(), Modifier.weight(1f))
+                }
+            }
+        }
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                when {
+                    scanning -> {
+                        LinearProgressIndicator(
+                            progress = { if (progress.total > 0) progress.done.toFloat() / progress.total else 0f },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(progress.done.toString() + " / " + progress.total, Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            TextButton(onClick = vm::cancel) { Text(t("Cancel", "取消")) }
+                        }
+                    }
+                    importing -> {
+                        LinearProgressIndicator(Modifier.fillMaxWidth())
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(t("Analyzing APK", "正在分析 APK"), Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            TextButton(onClick = vm::cancel) { Text(t("Cancel", "取消")) }
+                        }
+                    }
+                    else -> Button(onClick = vm::scan, enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+                        Icon(Icons.Default.Search, null, Modifier.size(20.dp))
+                        Spacer(Modifier.width(9.dp))
+                        Text(t("Scan applications", "扫描应用"))
                     }
                 }
-                3->{if(app.analysis.sdks.isEmpty())item{Text(t("No supported SDK class signatures found. This is not proof that no SDK is present.","未找到规则覆盖的 SDK 类签名，不代表不存在其他 SDK。"))};items(app.analysis.sdks){Fact("${it.name} · ${it.category}","${it.signature}\n${it.source}")}}
-                4->{
-                    val m=app.analysis.manifest
-                    if(m==null)item{Empty(Icons.Default.Description,t("Manifest unavailable","无法读取清单"),t("Import a readable APK or enable an authorized scan mode.","请导入可读 APK，或启用已授权的增强扫描模式。"))}
-                    else {item{Fact("allowBackup / debuggable / cleartext","${m.allowBackup} / ${m.debuggable} / ${m.cleartext}");Fact("Network Security Config",m.networkSecurityConfig ?: "None declared");Fact("Target SDK",m.targetSdk?.toString() ?: "Unknown")};items(m.components){Fact("${it.kind} · ${it.name}","Exported=${it.exported}\nPermission=${it.permission ?: "None"}\nAuthorities=${it.authorities ?: "—"}")}}
+                if (progress.status == "ERROR") Text(progress.error ?: t("Scan failed", "扫描失败"), color = MaterialTheme.colorScheme.error)
+            }
+        }
+        if (topApps.isNotEmpty()) {
+            item { Section(t("Review first", "优先检查")) }
+            items(topApps, key = { it.packageName }) { app -> AppRow(app) { onApp(app) } }
+            item { TextButton(onClick = onApps) { Text(t("All applications", "全部应用")); Icon(Icons.Default.ChevronRight, null, Modifier.size(18.dp)) } }
+        } else if (apps.isNotEmpty()) {
+            item {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.CheckCircle, null, tint = MaterialTheme.colorScheme.primary)
+                    Text(t("No flagged apps in this scan", "本次扫描未标记风险应用"), style = MaterialTheme.typography.bodyMedium)
                 }
-                5->{val findings=app.findings.filter{it.id.startsWith("dex:")};if(findings.isEmpty())item{Text(t("No supported code features found within analyzed DEX files.","已分析的 DEX 文件中未发现规则覆盖的代码特征。"))};items(findings){FindingRow(it)}}
-                6->{
-                    items(app.findings){FindingRow(it)}
-                    if(!app.imported){
-                        item{val context=LocalContext.current;Button(onClick={openSettings(context,app.packageName)}){Text(t("Open app / permissions settings","打开应用 / 权限设置"))}}
-                        item{Section(t("Restrict AppOp","限制 AppOp"));var op by remember{mutableStateOf("CAMERA")};Choice("AppOp",op,Commands.allowedOps.sorted().map{it to it}){op=it};OutlinedButton(onClick={vm.prepare(app,"APP_OP",op)}){Text(t("Review restriction","检查限制操作"))}}
-                        item{OutlinedButton(onClick={vm.prepare(app,"DISABLE")},enabled=!app.system){Text(t("Review disabling app","检查停用操作"))}}
-                        item{OutlinedButton(onClick={vm.prepare(app,"UNINSTALL")},enabled=!app.system){Text(t("Review uninstall & preserve APK","检查卸载并保留 APK"))}}
+                TextButton(onClick = onApps) { Text(t("View applications", "查看应用")) }
+            }
+        }
+        item {
+            MoreInfo(
+                t("How scoring works", "评分说明"),
+                t(
+                    "Risk scores rank items for review. They are not malware verdicts or proof of data disclosure. Static references, granted capabilities and observed connection metadata are separate evidence.",
+                    "风险分数用于安排检查优先级，不代表恶意软件判定或数据泄露证据。静态引用、已授予能力和实际连接元数据分别记录。"
+                )
+            )
+        }
+    }
+}
+
+@Composable private fun DashboardMetric(label: String, value: String, modifier: Modifier = Modifier, tone: String = "normal") {
+    val color = when (tone) {
+        "high" -> MaterialTheme.colorScheme.error
+        "medium" -> MaterialTheme.colorScheme.tertiary
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(value, style = MaterialTheme.typography.titleMedium, color = color, maxLines = 1)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+    }
+}
+@Composable private fun Applications(
+    apps: List<AppRecord>,
+    onSelect: (AppRecord) -> Unit,
+    onScan: () -> Unit,
+    onImport: () -> Unit,
+    selectedPackage: String? = null,
+    modifier: Modifier = Modifier
+) {
+    var query by rememberSaveable { mutableStateOf("") }
+    var filter by rememberSaveable { mutableStateOf("all") }
+    var sort by rememberSaveable { mutableStateOf("risk") }
+    val filtered = remember(apps, query, filter, sort) {
+        apps.filter {
+            (query.isBlank() || it.label.contains(query, true) || it.packageName.contains(query, true)) &&
+                when (filter) {
+                    "high" -> it.risk == Severity.HIGH
+                    "medium" -> it.risk == Severity.MEDIUM
+                    "system" -> it.system
+                    "imported" -> it.imported
+                    else -> true
+                }
+        }.let { list ->
+            when (sort) {
+                "name" -> list.sortedBy { it.label.lowercase() }
+                "hosts" -> list.sortedByDescending { it.analysis.endpoints.size }
+                else -> list.sortedByDescending { it.riskScore }
+            }
+        }
+    }
+    Column(modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text(t("Search apps", "搜索应用")) },
+                leadingIcon = { Icon(Icons.Default.Search, null) },
+                singleLine = true,
+                shape = RoundedCornerShape(14.dp)
+            )
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(
+                    "all" to t("All", "全部"),
+                    "high" to t("High", "高风险"),
+                    "medium" to t("Medium", "中风险"),
+                    "system" to t("System", "系统"),
+                    "imported" to t("Imported", "已导入")
+                ).forEach { (key, label) ->
+                    FilterChip(selected = filter == key, onClick = { filter = key }, label = { Text(label) })
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(filtered.size.toString(), Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Box(Modifier.widthIn(min = 150.dp, max = 210.dp)) {
+                    Choice(t("Sort", "排序"), sort, listOf("risk" to t("Risk", "风险"), "name" to t("Name", "名称"), "hosts" to t("Endpoints", "端点"))) { sort = it }
+                }
+            }
+        }
+        if (apps.isEmpty()) {
+            Empty(Icons.Default.Apps, t("No audit yet", "暂无审计结果"), t("Scan installed apps or import an APK.", "扫描已安装应用，或导入 APK。"), t("Scan applications", "扫描应用"), onScan)
+        } else if (filtered.isEmpty()) {
+            Empty(Icons.Default.SearchOff, t("No matches", "没有匹配项"), t("Change the search or filter.", "调整搜索条件或筛选项。"))
+        } else {
+            LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) {
+                items(filtered, key = { it.packageName }) { app ->
+                    AppRow(app, selected = selectedPackage == app.packageName) { onSelect(app) }
+                }
+            }
+        }
+        TextButton(onClick = onImport, modifier = Modifier.align(Alignment.CenterHorizontally).padding(bottom = 4.dp)) {
+            Icon(Icons.Default.FileOpen, null, Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(t("Import APK", "导入 APK"))
+        }
+    }
+}
+@Composable private fun AppRow(app: AppRecord, selected: Boolean = false, onClick: () -> Unit) {
+    val context = LocalContext.current
+    val icon by produceState<ImageBitmap?>(null, app.packageName) {
+        value = withContext(Dispatchers.IO) {
+            runCatching { context.packageManager.getApplicationIcon(app.packageName).toBitmap(96, 96).asImageBitmap() }.getOrNull()
+        }
+    }
+    Row(
+        Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (selected) MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f) else MaterialTheme.colorScheme.background)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        if (icon != null) Image(icon!!, null, Modifier.size(42.dp).clip(RoundedCornerShape(11.dp)))
+        else Surface(shape = RoundedCornerShape(11.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+            Icon(Icons.Default.Android, null, Modifier.size(42.dp).padding(9.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(app.label, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            Text(app.packageName, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Risk(app)
+    }
+    HorizontalDivider(Modifier.padding(start = 64.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f))
+}
+@Composable private fun AppDetail(
+    app: AppRecord,
+    connections: List<ConnectionRecord>,
+    vm: AuditViewModel,
+    modifier: Modifier = Modifier
+) {
+    var page by rememberSaveable(app.packageName) { mutableIntStateOf(0) }
+    val titles = listOf(t("Overview", "概览"), t("Permissions", "权限"), t("Network", "网络"), t("Technical", "技术"), t("Findings", "发现"))
+    Column(modifier.fillMaxSize()) {
+        ScrollableTabRow(page, edgePadding = 12.dp) {
+            titles.forEachIndexed { index, title -> Tab(selected = page == index, onClick = { page = index }, text = { Text(title) }) }
+        }
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            when (page) {
+                0 -> {
+                    item {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                            val context = LocalContext.current
+                            val icon by produceState<ImageBitmap?>(null, app.packageName) {
+                                value = withContext(Dispatchers.IO) {
+                                    runCatching { context.packageManager.getApplicationIcon(app.packageName).toBitmap(96, 96).asImageBitmap() }.getOrNull()
+                                }
+                            }
+                            if (icon != null) Image(icon!!, null, Modifier.size(52.dp).clip(RoundedCornerShape(12.dp)))
+                            else Icon(Icons.Default.Android, null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(app.label, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                                Text(app.packageName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Risk(app)
+                        }
+                    }
+                    item {
+                        Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            DashboardMetric(t("Permissions", "权限"), app.permissions.size.toString(), Modifier.weight(1f))
+                            DashboardMetric(t("Endpoints", "端点"), app.analysis.endpoints.size.toString(), Modifier.weight(1f))
+                            DashboardMetric(t("Findings", "发现"), app.findings.size.toString(), Modifier.weight(1f))
+                        }
+                    }
+                    item { Section(t("Application", "应用信息")) }
+                    item { Fact(t("Version", "版本"), app.version) }
+                    item { Fact("UID", app.uid.toString()) }
+                    item { Fact(t("Target SDK", "目标 SDK"), app.targetSdk.toString()) }
+                    item { Fact(t("Installer", "安装来源"), app.installer ?: "—") }
+                    item { Fact(t("Scan mode", "扫描模式"), modeName(app.mode)) }
+                    item { Fact(t("Scanned", "扫描时间"), date(app.scannedAt)) }
+                    if (app.findings.isNotEmpty()) {
+                        item { Section(t("Top findings", "主要发现")) }
+                        items(app.findings.sortedByDescending { it.points }.take(3)) { FindingRow(it) }
+                    }
+                    item {
+                        MoreInfo(
+                            t("Analysis coverage", "分析范围"),
+                            (app.limitations + app.analysis.limitations + app.analysis.filesAnalyzed).distinct().joinToString("\n").ifBlank { t("No additional coverage notes.", "没有其他范围说明。") }
+                        )
+                    }
+                }
+                1 -> {
+                    item { Section(t("Permission states", "权限状态")) }
+                    if (app.permissions.isEmpty()) item { Empty(Icons.Default.LockOpen, t("No permission data", "没有权限数据"), t("Permission details are unavailable.", "没有可用的权限详情。")) }
+                    items(app.permissions) { permission ->
+                        var expanded by rememberSaveable(permission.name) { mutableStateOf(false) }
+                        Column(Modifier.fillMaxWidth().animateContentSize().clickable { expanded = !expanded }.padding(vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    Text(permission.group, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(permission.name, style = MaterialTheme.typography.bodyMedium)
+                                }
+                                Text(
+                                    when (permission.granted) { true -> t("Granted", "已授予"); false -> t("Denied", "未授予"); null -> t("Unknown", "未知") },
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = if (permission.granted == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, null, Modifier.padding(start = 6.dp).size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            if (expanded) SelectionContainer {
+                                Text(
+                                    permission.protection + " · Declared=" + permission.declared +
+                                        "\nAppOps=" + (permission.appOp ?: "Unknown") +
+                                        " · Special=" + (permission.specialState ?: "—") +
+                                        "\n" + permission.evidence,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    }
+                    app.appOps?.let { value ->
+                        item { Section("AppOps") }
+                        item { SelectionContainer { Text(value, style = MaterialTheme.typography.bodySmall) } }
+                    }
+                }
+                2 -> {
+                    item { Section(t("Domains", "域名")) }
+                    if (app.analysis.endpoints.isEmpty()) item {
+                        Empty(Icons.Default.Language, t("No extracted domains", "没有提取到域名"), t("Encrypted or dynamically generated hosts may not appear.", "加密或动态生成的主机名可能不可见。"))
+                    }
+                    items(app.analysis.endpoints) { endpoint ->
+                        val observed = connections.count {
+                            it.uid == app.uid && app.uid >= 0 && (it.domain == endpoint.host || endpoint.host in it.dnsQueries)
+                        }
+                        Column(Modifier.fillMaxWidth().padding(vertical = 9.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(endpoint.host, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                                if (endpoint.tracker) Text(t("Tracker", "追踪器"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                            }
+                            Text(endpoint.provider + " · " + endpoint.category, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(endpoint.evidence.level.toString() + " · " + endpoint.evidence.source, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (observed > 0) Text(t("Observed connection metadata: ", "观察到的连接元数据：") + observed, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                            SelectionContainer { Text(endpoint.value + "\n" + endpoint.evidence.detail, style = MaterialTheme.typography.bodySmall) }
+                        }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    }
+                }
+                3 -> {
+                    val manifest = app.analysis.manifest
+                    item { Section(t("Manifest", "清单")) }
+                    if (manifest == null) item { Text(t("Manifest unavailable", "无法读取清单"), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    else {
+                        item { Fact("allowBackup", manifest.allowBackup.toString()) }
+                        item { Fact("debuggable", manifest.debuggable.toString()) }
+                        item { Fact("usesCleartextTraffic", manifest.cleartext.toString()) }
+                        item { Fact(t("Network security config", "网络安全配置"), manifest.networkSecurityConfig ?: "—") }
+                        item { Fact(t("Components", "组件"), manifest.components.size.toString()) }
+                        items(manifest.components) { component ->
+                            Fact(component.kind + " · " + component.name, "Exported=" + component.exported + " · Permission=" + (component.permission ?: "—") + " · Authorities=" + (component.authorities ?: "—"))
+                        }
+                    }
+                    item { Section("SDKs") }
+                    if (app.analysis.sdks.isEmpty()) item { Text(t("No supported SDK signatures found.", "未发现规则覆盖的 SDK 特征。"), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    items(app.analysis.sdks) { sdk ->
+                        Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text(sdk.name, style = MaterialTheme.typography.titleSmall)
+                            Text(sdk.category + " · " + sdk.source, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            SelectionContainer { Text(sdk.signature, style = MaterialTheme.typography.bodySmall) }
+                        }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    }
+                    item { Section("DEX") }
+                    val dexFindings = app.findings.filter { it.id.startsWith("dex:") }
+                    if (dexFindings.isEmpty()) item { Text(t("No supported code features found.", "未发现规则覆盖的代码特征。"), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    items(dexFindings) { FindingRow(it) }
+                }
+                4 -> {
+                    item { Section(t("Findings", "风险发现")) }
+                    if (app.findings.isEmpty()) item { Text(t("No findings in the analyzed scope.", "当前分析范围内没有风险发现。"), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    items(app.findings) { FindingRow(it) }
+                    if (app.exposures.isNotEmpty()) {
+                        item { Section(t("Permission / host signals", "权限与域名关联")) }
+                        items(app.exposures.take(200)) { link ->
+                            Fact(link.dataType + " → " + link.provider, link.host + "\n" + link.permission + "\n" + link.severity + " · " + link.level)
+                        }
+                    }
+                    if (!app.imported) {
+                        item { Section(t("Device actions", "设备操作")) }
+                        item {
+                            var op by rememberSaveable(app.packageName) { mutableStateOf("CAMERA") }
+                            Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                                Choice("AppOp", op, Commands.allowedOps.sorted().map { it to it }) { op = it }
+                                OutlinedButton(onClick = { vm.prepare(app, "APP_OP", op) }, modifier = Modifier.fillMaxWidth()) { Text(t("Review restriction", "检查权限限制")) }
+                                OutlinedButton(onClick = { vm.prepare(app, "DISABLE") }, enabled = !app.system, modifier = Modifier.fillMaxWidth()) { Text(t("Review disabling app", "检查停用应用")) }
+                                OutlinedButton(onClick = { vm.prepare(app, "UNINSTALL") }, enabled = !app.system, modifier = Modifier.fillMaxWidth()) { Text(t("Review uninstall", "检查卸载操作")) }
+                            }
+                        }
                     }
                 }
             }
         }
     }
 }
-@Composable private fun FindingRow(f:Finding){Column(Modifier.fillMaxWidth().padding(vertical=8.dp)){Text(f.title,style=MaterialTheme.typography.titleMedium);Text("${f.severity} · weight ${f.points} (before cap) · ${f.evidence.level}",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.primary);SelectionContainer{Text("${f.evidence.source}\n${f.evidence.detail}",style=MaterialTheme.typography.bodySmall)};Text(f.recommendation,Modifier.padding(top=6.dp),style=MaterialTheme.typography.bodyMedium);HorizontalDivider(Modifier.padding(top=12.dp))}}
-
-@Composable private fun ActionsScreen(apps:List<AppRecord>,records:List<ActionRecord>,onApp:(AppRecord)->Unit,onRollback:(ActionRecord)->Unit){
-    LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
-        item{Section(t("Recommended reviews","建议检查"))}
-        if(apps.isEmpty())item{Text(t("Scan applications to see recommendations.","扫描应用后将显示检查建议。"))}
-        items(apps.filter{it.findings.isNotEmpty()}.sortedByDescending{it.riskScore}.take(30),key={it.packageName}){AppRow(it){onApp(it)}}
-        item{Section(t("Action & rollback history","处置与回滚历史"))}
-        if(records.isEmpty())item{Empty(Icons.Default.History,t("No device changes","暂无设备修改"),t("Confirmed changes and their original state appear here.","确认的修改及原始状态将保存在这里。"))}
-        items(records,key={it.id}){r->OutlinedCard(Modifier.fillMaxWidth()){Column(Modifier.padding(14.dp)){Text(r.packageName,style=MaterialTheme.typography.titleMedium);Text("${r.action} ${r.argument} · ${r.scope}\n${r.original} → ${r.desired}\n${r.result}\n${date(r.createdAt)} · ${r.mode} · user=${r.userId}",style=MaterialTheme.typography.bodyMedium);if(r.canRollback)OutlinedButton(onClick={onRollback(r)}){Text(t("Review rollback","检查回滚"))}}}}
+@Composable private fun FindingRow(f: Finding) {
+    val color = when (f.severity) {
+        Severity.HIGH -> MaterialTheme.colorScheme.error
+        Severity.MEDIUM -> MaterialTheme.colorScheme.tertiary
+        Severity.LOW -> MaterialTheme.colorScheme.primary
+        Severity.INFO -> MaterialTheme.colorScheme.secondary
+    }
+    Column(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(f.title, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+            Text(f.severity.name, style = MaterialTheme.typography.labelSmall, color = color, fontWeight = FontWeight.Bold)
+        }
+        Text(f.evidence.level.toString() + " · " + f.points, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(f.recommendation, style = MaterialTheme.typography.bodyMedium)
+        SelectionContainer { Text(f.evidence.source + "\n" + f.evidence.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+    }
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+}
+@Composable private fun ActionsScreen(
+    apps: List<AppRecord>,
+    records: List<ActionRecord>,
+    onApp: (AppRecord) -> Unit,
+    onRollback: (ActionRecord) -> Unit
+) {
+    val review = apps.filter { it.findings.isNotEmpty() || it.riskScore > 0 }.sortedByDescending { it.riskScore }.take(30)
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        item { Section(t("Review queue", "待检查")) }
+        if (review.isEmpty()) item { Text(t("No apps need review.", "暂无待检查应用。"), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        items(review, key = { it.packageName }) { app -> AppRow(app) { onApp(app) } }
+        item { Spacer(Modifier.height(10.dp)); Section(t("Action history", "处置记录")) }
+        if (records.isEmpty()) item { Text(t("No device changes.", "暂无设备修改记录。"), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        items(records, key = { it.id }) { record ->
+            Column(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(record.packageName, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                    if (record.canRollback) TextButton(onClick = { onRollback(record) }) { Text(t("Restore", "恢复")) }
+                }
+                Text((record.action + " " + record.argument).trim(), style = MaterialTheme.typography.bodyMedium)
+                Text(record.original + " → " + record.desired, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(Modifier.size(8.dp).background(if (record.result.startsWith("SUCCESS")) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error, CircleShape))
+                    Text(record.result, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(date(record.createdAt), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        }
     }
 }
-
 @Composable internal fun Toggle(label:String,checked:Boolean,onChange:(Boolean)->Unit){Row(Modifier.fillMaxWidth().padding(vertical=4.dp),verticalAlignment=Alignment.CenterVertically){Text(label,Modifier.weight(1f));Switch(checked,onChange)}}
 @Composable internal fun Choice(label:String,value:String,options:List<Pair<String,String>>,onSelect:(String)->Unit){var open by remember{mutableStateOf(false)};Box{Row(Modifier.fillMaxWidth().heightIn(min=48.dp).clickable{open=true}.padding(vertical=6.dp),verticalAlignment=Alignment.CenterVertically){Text(label,Modifier.weight(1f),style=MaterialTheme.typography.bodyLarge);Spacer(Modifier.width(12.dp));Text(options.firstOrNull{it.first==value}?.second ?: value,color=MaterialTheme.colorScheme.primary,maxLines=2,style=MaterialTheme.typography.bodyMedium);Icon(Icons.Default.KeyboardArrowDown,null,Modifier.size(20.dp),tint=MaterialTheme.colorScheme.onSurfaceVariant)};DropdownMenu(expanded=open,onDismissRequest={open=false}){options.forEach{(key,text)->DropdownMenuItem(text={Text(text)},onClick={open=false;onSelect(key)})}}}}

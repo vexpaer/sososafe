@@ -40,3 +40,16 @@ UI screenshots in the README come from GitHub emulator runs. Empty screenshots s
 Physical KernelSU, Magisk and APatch authorization, actual Shizuku pairing/service identity, OEM restrictions and physical Wi-Fi/mobile handovers require corresponding authorized device tests. The implementations exist, and mocked/pure policy tests cover their safety rules; emulator results do not certify every manager or OEM. HTTPS, DoH/DoT and ECH content is not inspected.
 
 [Android CI](https://github.com/vexpaer/sososafe/actions/workflows/android-ci.yml) · [Release workflow](https://github.com/vexpaer/sososafe/actions/workflows/android-release.yml) · [v0.1.0](https://github.com/vexpaer/sososafe/releases/tag/v0.1.0)
+
+## UI refresh screenshot review
+
+The emulator verification job also captures these navigation states in `artifacts/screens/`:
+
+- `apps.png` — application inventory and filters
+- `app-detail.png` — selected application detail
+- `network.png` — local VPN status and connection list
+- `actions.png` — review queue and rollback history
+- `settings.png` — appearance, access, storage, and report controls
+- `overview.png` — dashboard after returning from the other destinations
+
+The existing light, dark / large-text, and tablet screenshots remain part of the same run. Screenshots are reviewed alongside build and instrumentation results; they are not a substitute for Root, Shizuku, or physical-device validation.

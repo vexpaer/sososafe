@@ -36,8 +36,8 @@ import app.sososafe.mobile.platform.vpn.MonitorState
             Choice(t("Language","界面语言"),s.language,listOf("zh" to "中文","en" to "English")){vm.set("language",it)}
             HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant)
             Choice(t("Theme","主题"),s.theme,listOf("system" to t("System","跟随系统"),"light" to t("Light","浅色"),"dark" to t("Dark","深色"))){vm.set("theme",it)}
-            Toggle(t("Dynamic color","动态取色"),s.dynamic){vm.set("dynamic",it)}
-            Choice(t("Accent","主题色"),s.color,listOf("teal" to t("Teal","青绿"),"blue" to t("Blue","蓝色"),"plum" to t("Plum","紫色"))){vm.accent(it)}
+            if(android.os.Build.VERSION.SDK_INT>=31) Toggle(t("Dynamic color","动态取色"),s.dynamic){vm.set("dynamic",it)}
+            if(!s.dynamic || android.os.Build.VERSION.SDK_INT<31) Choice(t("Accent","主题色"),s.color,listOf("teal" to t("Teal","青绿"),"blue" to t("Blue","蓝色"),"plum" to t("Plum","紫色"))){vm.accent(it)}
         }}
         item{Section(t("Device access","设备访问"))}
         item{Panel{
@@ -95,12 +95,36 @@ import app.sososafe.mobile.platform.vpn.MonitorState
 
 @Composable private fun ConnectionCard(c:ConnectionRecord){
     var expanded by rememberSaveable(c.id){mutableStateOf(false)}
-    Surface(onClick={expanded=!expanded},shape=RoundedCornerShape(16.dp),color=MaterialTheme.colorScheme.surfaceContainerLow,border=BorderStroke(0.75.dp,MaterialTheme.colorScheme.outlineVariant)){
-        Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
-            Row(verticalAlignment=Alignment.CenterVertically){Text(c.domain ?: c.remoteIp,Modifier.weight(1f),style=MaterialTheme.typography.titleMedium,maxLines=2,overflow=TextOverflow.Ellipsis);Icon(if(expanded)Icons.Default.ExpandLess else Icons.Default.ExpandMore,null)}
-            Text(c.packages.joinToString().ifBlank{c.uid?.let{"UID $it"} ?: t("Unknown application","应用未知")},style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
-            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text("${c.protocol} · ${c.remotePort}",style=MaterialTheme.typography.labelLarge,color=if(c.tracker)MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary);Text("↑ ${bytes(c.uploaded)}   ↓ ${bytes(c.downloaded)}",style=MaterialTheme.typography.bodyMedium)}
-            if(expanded){HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant);SelectionContainer{Text("${c.localIp}:${c.localPort} → ${c.remoteIp}:${c.remotePort}\n${c.attribution} · UID ${c.uid ?: "?"}\n${c.provider} · ${c.category}\n${c.domainEvidence ?: "IP metadata"}\n${c.packets} packets · ${c.connections} connections\n${date(c.firstSeen)} → ${date(c.lastSeen)}"+if(c.dnsQueries.isEmpty())""else "\nDNS: ${c.dnsQueries.joinToString()}",style=MaterialTheme.typography.bodyMedium)}}
+    Column(
+        Modifier.fillMaxWidth().clickable{expanded=!expanded}.padding(vertical=11.dp),
+        verticalArrangement=Arrangement.spacedBy(5.dp)
+    ){
+        Row(verticalAlignment=Alignment.CenterVertically){
+            Text(c.domain ?: c.remoteIp,Modifier.weight(1f),style=MaterialTheme.typography.bodyLarge,fontWeight=FontWeight.Medium,maxLines=1,overflow=TextOverflow.Ellipsis)
+            if(c.tracker) Text(t("Tracker","追踪器"),style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.error)
+            Icon(if(expanded)Icons.Default.ExpandLess else Icons.Default.ExpandMore,null,Modifier.padding(start=5.dp).size(18.dp),tint=MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Text(c.packages.joinToString().ifBlank{c.uid?.let{"UID $it"} ?: t("Unknown application","应用未知")},style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant,maxLines=1,overflow=TextOverflow.Ellipsis)
+        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
+            Text(c.protocol+" · "+c.remotePort,Modifier.weight(1f),style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.primary)
+            Text("↑ "+bytes(c.uploaded)+"   ↓ "+bytes(c.downloaded),style=MaterialTheme.typography.labelMedium)
+        }
+        if(expanded){
+            HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant)
+            SelectionContainer{
+                Text(
+                    c.localIp+":"+c.localPort+" → "+c.remoteIp+":"+c.remotePort+"\n"+
+                    c.attribution+" · UID "+(c.uid?.toString() ?: "?")+"\n"+
+                    c.provider+" · "+c.category+"\n"+
+                    (c.domainEvidence ?: "IP metadata")+"\n"+
+                    c.packets+" packets · "+c.connections+" connections\n"+
+                    date(c.firstSeen)+" → "+date(c.lastSeen)+
+                    if(c.dnsQueries.isEmpty()) "" else "\nDNS: "+c.dnsQueries.joinToString(),
+                    style=MaterialTheme.typography.bodySmall,
+                    color=MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
+    HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant.copy(alpha=0.65f))
 }

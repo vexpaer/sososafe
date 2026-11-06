@@ -218,7 +218,7 @@ private fun openSettings(context:android.content.Context,pkg:String){context.sta
                     DashboardMetric(t("Apps", "应用"), apps.size.toString(), Modifier.weight(1f))
                     DashboardMetric(t("High", "高风险"), high.toString(), Modifier.weight(1f), "high")
                     DashboardMetric(t("Medium", "中风险"), medium.toString(), Modifier.weight(1f), "medium")
-                    DashboardMetric(t("Hosts", "域名"), hosts.toString(), Modifier.weight(1f))
+                    DashboardMetric(t("APK hosts", "APK 域名"), hosts.toString(), Modifier.weight(1f))
                 }
             }
         }
@@ -341,7 +341,7 @@ private fun openSettings(context:android.content.Context,pkg:String){context.sta
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(filtered.size.toString(), Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Box(Modifier.widthIn(min = 150.dp, max = 210.dp)) {
-                    Choice(t("Sort", "排序"), sort, listOf("risk" to t("Risk", "风险"), "name" to t("Name", "名称"), "hosts" to t("Hosts", "域名"))) { sort = it }
+                    Choice(t("Sort", "排序"), sort, listOf("risk" to t("Risk", "风险"), "name" to t("Name", "名称"), "hosts" to t("Endpoints", "端点"))) { sort = it }
                 }
             }
         }
@@ -426,7 +426,7 @@ private fun openSettings(context:android.content.Context,pkg:String){context.sta
                     item {
                         Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             DashboardMetric(t("Permissions", "权限"), app.permissions.size.toString(), Modifier.weight(1f))
-                            DashboardMetric(t("Hosts", "域名"), app.analysis.endpoints.size.toString(), Modifier.weight(1f))
+                            DashboardMetric(t("Endpoints", "端点"), app.analysis.endpoints.size.toString(), Modifier.weight(1f))
                             DashboardMetric(t("Findings", "发现"), app.findings.size.toString(), Modifier.weight(1f))
                         }
                     }

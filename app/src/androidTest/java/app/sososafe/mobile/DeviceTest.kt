@@ -41,7 +41,7 @@ class DeviceTest {
             device.waitForIdle(5000)
         }
     }
-    @Before fun firstRunChoosesLanguage()=runBlocking {
+    @Before fun firstRunChoosesLanguage()=runBlocking<Unit> {
         val device=UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
         dismissEmulatorSystemAnr(device)
         if(!app.repo.settings.flow.first().languageChosen){
@@ -56,7 +56,7 @@ class DeviceTest {
             }finally{activity.close()}
         }
     }
-    @Test fun interfaceLanguageSwitchesAndPersists()=runBlocking {
+    @Test fun interfaceLanguageSwitchesAndPersists()=runBlocking<Unit> {
         val activity=ActivityScenario.launch(MainActivity::class.java)
         try{
             val device=UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
@@ -75,7 +75,7 @@ class DeviceTest {
             assertFalse(device.hasObject(By.text("选择语言 / Choose language")))
         }finally{activity.close()}
     }
-    @Test fun standardScanReadsRealMetadataAndApk()=runBlocking {
+    @Test fun standardScanReadsRealMetadataAndApk()=runBlocking<Unit> {
         val scanner=PackageScanner(context,app.repo.access,ScanMode.STANDARD)
         val inventory=scanner.inventory();assertTrue(inventory.any{it.name==context.packageName})
         val record=scanner.scan(inventory.first{it.name==context.packageName},true)
@@ -93,7 +93,7 @@ class DeviceTest {
             device.takeScreenshot(File(context.getExternalFilesDir(null),"overview-scanned.png"))
         }finally{activity.close()}
     }
-    @Test fun importsActualApkAndPersistsSeparateRecord()=runBlocking {
+    @Test fun importsActualApkAndPersistsSeparateRecord()=runBlocking<Unit> {
         val path=context.packageManager.getApplicationInfo(context.packageName,0).sourceDir
         val imported=app.repo.importApk(Uri.fromFile(File(path)))
         assertTrue(imported.imported);assertTrue(imported.packageName.startsWith("import:"));assertTrue(imported.permissions.all{it.granted==null})
@@ -122,7 +122,7 @@ class DeviceTest {
             assertEquals(value,builder.toString())
         }finally{migrated.close();context.deleteDatabase(name)}
     }
-    @Test fun localVpnForwardsAnotherAppTcpUdpDnsAndStops()=runBlocking {
+    @Test fun localVpnForwardsAnotherAppTcpUdpDnsAndStops()=runBlocking<Unit> {
         val activity=ActivityScenario.launch(MainActivity::class.java)
         val device=UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
         val intent=VpnService.prepare(context)

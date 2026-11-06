@@ -24,5 +24,5 @@ for cls,test,code,stack in records:
     if code!=0:SubElement(case,'failure',message=f'Instrumentation status {code}').text=stack
 ElementTree(suite).write(sys.argv[2],encoding='utf-8',xml_declaration=True)
 print(f'Executed {len(records)} device tests; failures/skips={failures}')
-if len(records)<6 or failures or not re.search(r'^OK \([1-9][0-9]* tests?\)',raw,re.M):
-    raise SystemExit('Device verification incomplete: expected at least 6 actual passing tests and JUnit OK result')
+if len(records)<7 or failures or not re.search(r'^OK \([1-9][0-9]* tests?\)',raw,re.M):
+    raise SystemExit('Device verification incomplete: expected at least 7 actual passing tests and JUnit OK result')

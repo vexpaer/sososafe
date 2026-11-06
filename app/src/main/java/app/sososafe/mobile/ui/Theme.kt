@@ -8,25 +8,126 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import app.sososafe.mobile.data.UserSettings
-import java.util.Locale
 import androidx.core.view.WindowCompat
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 
-val LocalChinese=staticCompositionLocalOf{false}
-@Composable fun t(en:String,zh:String)=if(LocalChinese.current)zh else en
-@Composable fun SosoTheme(settings:UserSettings,content:@Composable ()->Unit){
-    val dark=when(settings.theme){"dark"->true;"light"->false;else->isSystemInDarkTheme()}
-    val primary=when(settings.color){"blue"->Color(0xFF315DA8);"plum"->Color(0xFF81507C);else->Color(0xFF006B5B)}
-    val color=if(dark)when(settings.color){"blue"->Color(0xFFB0C6FF);"plum"->Color(0xFFF1B5E5);else->Color(0xFF8CD8C2)}else primary
-    val base=if(settings.dynamic && Build.VERSION.SDK_INT>=31){if(dark)dynamicDarkColorScheme(LocalContext.current)else dynamicLightColorScheme(LocalContext.current)}else if(dark)darkColorScheme(primary=color,secondary=Color(0xFFB3CCC4))else lightColorScheme(primary=primary,secondary=Color(0xFF4B635C))
-    val scheme=base.copy(background=if(dark)Color(0xFF111413)else Color(0xFFF6F8F7),surface=if(dark)Color(0xFF171B19)else Color(0xFFFCFDFC),surfaceContainerLow=if(dark)Color(0xFF181D1A)else Color(0xFFFFFFFF),outlineVariant=if(dark)Color(0xFF38413B)else Color(0xFFDFE5E1))
-    val activity=LocalActivity.current
-    SideEffect{activity?.let{
-        WindowCompat.getInsetsController(it.window,it.window.decorView).apply{isAppearanceLightStatusBars=!dark;isAppearanceLightNavigationBars=!dark}
-        if(Build.VERSION.SDK_INT>=29)it.window.isNavigationBarContrastEnforced=false
-    }}
-    val chinese=when(settings.language){"zh"->true;"en"->false;else->LocalConfiguration.current.locales[0].language=="zh"}
-    CompositionLocalProvider(LocalChinese provides chinese){MaterialTheme(colorScheme=scheme,shapes=Shapes(extraSmall=RoundedCornerShape(8.dp),small=RoundedCornerShape(12.dp),medium=RoundedCornerShape(16.dp),large=RoundedCornerShape(20.dp),extraLarge=RoundedCornerShape(28.dp)),content=content)}
+val LocalChinese = staticCompositionLocalOf { false }
+
+@Composable
+fun t(en: String, zh: String) = if (LocalChinese.current) zh else en
+
+@Composable
+fun SosoTheme(settings: UserSettings, content: @Composable () -> Unit) {
+    val dark = when (settings.theme) {
+        "dark" -> true
+        "light" -> false
+        else -> isSystemInDarkTheme()
+    }
+
+    val lightPrimary = when (settings.color) {
+        "blue" -> Color(0xFF315DA8)
+        "plum" -> Color(0xFF81507C)
+        else -> Color(0xFF176B5B)
+    }
+    val darkPrimary = when (settings.color) {
+        "blue" -> Color(0xFFB0C6FF)
+        "plum" -> Color(0xFFF0B7E6)
+        else -> Color(0xFF8BD6C0)
+    }
+    val lightContainer = when (settings.color) {
+        "blue" -> Color(0xFFD9E2FF)
+        "plum" -> Color(0xFFFFD7F2)
+        else -> Color(0xFFBDEBDD)
+    }
+    val darkContainer = when (settings.color) {
+        "blue" -> Color(0xFF3B528C)
+        "plum" -> Color(0xFF613A60)
+        else -> Color(0xFF145345)
+    }
+    val lightSecondary = when (settings.color) {
+        "blue" -> Color(0xFF565F71)
+        "plum" -> Color(0xFF6C586A)
+        else -> Color(0xFF4B635B)
+    }
+    val darkSecondary = when (settings.color) {
+        "blue" -> Color(0xFFC0C7DC)
+        "plum" -> Color(0xFFD7C0D2)
+        else -> Color(0xFFB3CCC3)
+    }
+    val lightTertiary = when (settings.color) {
+        "blue" -> Color(0xFF725B7E)
+        "plum" -> Color(0xFF765A43)
+        else -> Color(0xFF496276)
+    }
+    val darkTertiary = when (settings.color) {
+        "blue" -> Color(0xFFD8BDE2)
+        "plum" -> Color(0xFFE5C2A5)
+        else -> Color(0xFFB3C9E0)
+    }
+
+    val dynamicAvailable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val base = when {
+        settings.dynamic && dynamicAvailable -> if (dark) dynamicDarkColorScheme(LocalContext.current) else dynamicLightColorScheme(LocalContext.current)
+        dark -> darkColorScheme(
+            primary = darkPrimary,
+            onPrimary = Color(0xFF00382D),
+            primaryContainer = darkContainer,
+            onPrimaryContainer = Color(0xFFE0F5EB),
+            secondary = darkSecondary,
+            tertiary = darkTertiary
+        )
+        else -> lightColorScheme(
+            primary = lightPrimary,
+            onPrimary = Color.White,
+            primaryContainer = lightContainer,
+            onPrimaryContainer = Color(0xFF06251D),
+            secondary = lightSecondary,
+            tertiary = lightTertiary
+        )
+    }
+
+    val scheme = base.copy(
+        background = if (dark) Color(0xFF101512) else Color(0xFFF7F8F6),
+        surface = if (dark) Color(0xFF161C18) else Color(0xFFFCFDFC),
+        surfaceContainerLowest = if (dark) Color(0xFF0C110E) else Color.White,
+        surfaceContainerLow = if (dark) Color(0xFF1B211D) else Color(0xFFF0F2EF),
+        surfaceContainer = if (dark) Color(0xFF202722) else Color(0xFFEAEEEA),
+        surfaceContainerHigh = if (dark) Color(0xFF27302A) else Color(0xFFE4E8E3),
+        surfaceContainerHighest = if (dark) Color(0xFF303A33) else Color(0xFFDDE3DD),
+        outline = if (dark) Color(0xFF89948C) else Color(0xFF737D75),
+        outlineVariant = if (dark) Color(0xFF3E4941) else Color(0xFFD7DED7)
+    )
+
+    val activity = LocalActivity.current
+    SideEffect {
+        activity?.let {
+            WindowCompat.getInsetsController(it.window, it.window.decorView).apply {
+                isAppearanceLightStatusBars = !dark
+                isAppearanceLightNavigationBars = !dark
+            }
+            if (Build.VERSION.SDK_INT >= 29) it.window.isNavigationBarContrastEnforced = false
+        }
+    }
+
+    val chinese = when (settings.language) {
+        "zh" -> true
+        "en" -> false
+        else -> LocalConfiguration.current.locales[0].language == "zh"
+    }
+
+    CompositionLocalProvider(LocalChinese provides chinese) {
+        MaterialTheme(
+            colorScheme = scheme,
+            shapes = Shapes(
+                extraSmall = RoundedCornerShape(4.dp),
+                small = RoundedCornerShape(8.dp),
+                medium = RoundedCornerShape(12.dp),
+                large = RoundedCornerShape(16.dp),
+                extraLarge = RoundedCornerShape(24.dp)
+            ),
+            content = content
+        )
+    }
 }

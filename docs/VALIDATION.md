@@ -33,7 +33,7 @@ The seven device tests verify:
 - `sososafe-device-verification-api-26/35/36`: raw instrumentation output, generated JUnit XML, device logcat, phone/dark/large-text/tablet screenshots, language screenshots and observed VPN metadata.
 - `sososafe-release-verification`: Release build/test/Lint reports and signature verification output.
 
-The instrumentation guard requires at least six terminal success results and a JUnit success summary. Empty, skipped and failed test runs cannot become green. Known **System UI / Quickstep emulator ANR overlays** may be dismissed by the test setup; auditor and traffic-fixture ANRs are never dismissed by that recovery code.
+The instrumentation guard requires at least seven terminal success results and a JUnit success summary. Empty, skipped and failed test runs cannot become green. Known **System UI / Quickstep emulator ANR overlays** may be dismissed by the test setup; auditor and traffic-fixture ANRs are never dismissed by that recovery code.
 
 UI screenshots in the README come from GitHub emulator runs. Empty screenshots show the real initial state; they contain no fabricated scan data. Light, dark, large-text and tablet layouts were visually inspected in bounded passes.
 
